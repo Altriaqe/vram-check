@@ -1,14 +1,15 @@
+<p align="center">
+  <img src="docs/assets/banner.png" alt="显存检查 VRAM Check" width="100%">
+</p>
+
 <div align="center">
 
-# 显存检查 · VRAM Check
-
-**谁占着显存、它是干什么的、关掉能省多少。**
-
-Windows 10 / 11 · 单文件 · 无需安装 · MIT
-
-![License](https://img.shields.io/badge/license-MIT-green)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue)
-![Rust](https://img.shields.io/badge/rust-1.75%2B-orange)
+[![Latest release](https://img.shields.io/github/v/release/Altriaqe/vram-check?style=flat-square&label=release)](https://github.com/Altriaqe/vram-check/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Altriaqe/vram-check/total?style=flat-square&label=downloads)](https://github.com/Altriaqe/vram-check/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-blue?style=flat-square)](https://github.com/Altriaqe/vram-check)
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange?style=flat-square)](https://www.rust-lang.org)
+[![Stars](https://img.shields.io/github/stars/Altriaqe/vram-check?style=social)](https://github.com/Altriaqe/vram-check/stargazers)
 
 [下载最新版](https://github.com/Altriaqe/vram-check/releases/latest) ·
 [问题反馈](https://github.com/Altriaqe/vram-check/issues) ·
@@ -181,7 +182,6 @@ vram-check/
 | [docs/DECISIONS.md](docs/DECISIONS.md) | ADR：为什么用 Rust / 原生控件 / Local 口径 |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | 工程规范：unsafe、错误处理、文案、提交 |
 | [docs/M1-MEASUREMENTS.md](docs/M1-MEASUREMENTS.md) | 体积、启动、采样、内存实测 |
-| [SYNC.md](SYNC.md) | 开发交接：当前进度、测试纪律、环境台账 |
 
 ## 开发
 
@@ -220,3 +220,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1
 - [hypomnesis](https://github.com/PCfVW/hypomnesis)（MIT OR Apache-2.0）：PDH/DXGI 数据后端的思路来源。本项目按 Win32 API 自行实现，未复制源码。
 - [xcyclopedia](https://github.com/strontic/xcyclopedia)（MIT）：调研进程说明数据时参考过，最终未内置（数据停在 2021 年，不覆盖新程序）。
 - 所有提交 issue、反馈真实数据的热心用户。
+
+<p align="center">如果这个项目对你有帮助，点个 ⭐ 支持一下。</p>
+

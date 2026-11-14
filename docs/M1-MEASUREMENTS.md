@@ -72,7 +72,7 @@ Local 合计     826.6 MB（36 个实例）   程序算得 811–818 MB
 
 **发现 5（开发环境坑，不是产品 bug）：工作区被标成 Low 完整性，导致 Toolhelp 只能看到 21/336 个进程。**
 
-`E:\Code\vram-sentinel` 目录上有一条 `Mandatory Label\Low Mandatory Level`，其下新生成的 exe 启动后进程令牌也是 Low，`CreateToolhelp32Snapshot` 只返回同完整性级的进程——界面大量 `?`。已把目录标签改为 Medium（`icacls ... /setintegritylevel (OI)(CI)M`），重建后恢复正常。这条与之前 DSH 沙箱的 ACL 报错同源，记在 `SYNC.md`。
+`E:\Code\vram-sentinel` 目录上有一条 `Mandatory Label\Low Mandatory Level`，其下新生成的 exe 启动后进程令牌也是 Low，`CreateToolhelp32Snapshot` 只返回同完整性级的进程——界面大量 `?`。已把目录标签改为 Medium（`icacls ... /setintegritylevel (OI)(CI)M`），重建后恢复正常。这条与之前 DSH 沙箱的 ACL 报错同源。
 
 ---
 

@@ -286,7 +286,6 @@ vram-check/
 ├── build.rs                  manifest / .res 交给 MSVC 链接器
 ├── LICENSE                   MIT
 ├── README.md
-├── SYNC.md                  交接班：测试纪律、下载纪律、环境台账
 ├── THIRD-PARTY-NOTICES.md
 ├── docs/
 │   ├── PRD.md
