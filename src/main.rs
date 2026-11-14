@@ -3,6 +3,7 @@
 mod app;
 mod data;
 mod explain;
+mod format;
 mod ui;
 mod vendor;
 

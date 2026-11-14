@@ -16,17 +16,34 @@ pub struct ProcSample {
     pub nonlocal_bytes: u64,
     /// 最忙引擎的占用率，不是求和。
     pub gpu_pct: Option<f32>,
+    /// 是否有可见的顶层窗口（用于"有窗口 = 谨慎"的判断）。
+    pub has_window: bool,
+}
+
+/// 组内单个进程。展开分组时显示。
+#[derive(Debug, Clone)]
+pub struct GroupMember {
+    pub pid: u32,
+    pub name: String,
+    pub local_bytes: u64,
+    pub gpu_pct: Option<f32>,
+    pub has_window: bool,
 }
 
 /// 进程树聚合后的一行。
 #[derive(Debug, Clone)]
 pub struct AppGroup {
     pub root_pid: u32,
+    pub root_name: String,
+    /// 显示用标题，如 "chrome.exe × 12"。
     pub title: String,
     pub local_bytes: u64,
+    pub nonlocal_bytes: u64,
     /// 组内最忙的进程，取 max 不求和。
     pub gpu_pct: Option<f32>,
-    pub members: Vec<u32>,
+    /// 组内任一进程有可见窗口。
+    pub has_window: bool,
+    pub members: Vec<GroupMember>,
 }
 
 /// 未归属（整卡 − Σ本地）的三种状态，**永不为负**。
@@ -90,30 +107,42 @@ pub fn build_groups(samples: &[ProcSample]) -> Vec<AppGroup> {
         let root = root_of[&sample.pid];
         let group = groups.entry(root).or_insert_with(|| AppGroup {
             root_pid: root,
+            root_name: index
+                .get(&root)
+                .map(|s| s.name.clone())
+                .unwrap_or_else(|| "?".to_string()),
             title: String::new(),
             local_bytes: 0,
+            nonlocal_bytes: 0,
             gpu_pct: None,
+            has_window: false,
             members: Vec::new(),
         });
         group.local_bytes += sample.local_bytes;
+        group.nonlocal_bytes += sample.nonlocal_bytes;
+        group.has_window |= sample.has_window;
         if let Some(pct) = sample.gpu_pct {
             group.gpu_pct = Some(group.gpu_pct.map_or(pct, |old| old.max(pct)));
         }
-        group.members.push(sample.pid);
+        group.members.push(GroupMember {
+            pid: sample.pid,
+            name: sample.name.clone(),
+            local_bytes: sample.local_bytes,
+            gpu_pct: sample.gpu_pct,
+            has_window: sample.has_window,
+        });
     }
 
     let mut out: Vec<AppGroup> = groups
         .into_values()
         .map(|mut group| {
-            group.members.sort_unstable();
-            let name = index
-                .get(&group.root_pid)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| "?".to_string());
+            group
+                .members
+                .sort_unstable_by_key(|member| std::cmp::Reverse(member.local_bytes));
             group.title = if group.members.len() > 1 {
-                format!("{name} × {}", group.members.len())
+                format!("{} × {}", group.root_name, group.members.len())
             } else {
-                name
+                group.root_name.clone()
             };
             group
         })
@@ -153,7 +182,12 @@ mod tests {
             local_bytes: mb * 1024 * 1024,
             nonlocal_bytes: 0,
             gpu_pct: None,
+            has_window: false,
         }
+    }
+
+    fn member_pids(group: &AppGroup) -> Vec<u32> {
+        group.members.iter().map(|m| m.pid).collect()
     }
 
     #[test]
@@ -168,7 +202,7 @@ mod tests {
         assert_eq!(groups[0].root_pid, 100);
         assert_eq!(groups[0].title, "chrome.exe × 3");
         assert_eq!(groups[0].local_bytes, 1600 * 1024 * 1024);
-        assert_eq!(groups[0].members, vec![100, 101, 102]);
+        assert_eq!(member_pids(&groups[0]), vec![100, 101, 102]);
     }
 
     #[test]
@@ -211,6 +245,17 @@ mod tests {
         let samples = vec![sample(1, 0, "small.exe", 10), sample(2, 0, "big.exe", 900)];
         let groups = build_groups(&samples);
         assert_eq!(groups[0].title, "big.exe");
+    }
+
+    #[test]
+    fn keeps_member_split_and_window_flag() {
+        let mut a = sample(10, 0, "chrome.exe", 100);
+        a.has_window = true;
+        let b = sample(11, 10, "chrome.exe", 300);
+        let groups = build_groups(&[b, a]);
+        assert!(groups[0].has_window);
+        assert_eq!(groups[0].members[0].pid, 11);
+        assert_eq!(groups[0].members[1].local_bytes, 100 * 1024 * 1024);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{GetSysColorBrush, SetBkMode, COLOR_WINDOW, HDC, TRANSPARENT};
+use windows::Win32::UI::Controls::{NMHDR, NM_CUSTOMDRAW, NM_DBLCLK};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetWindowLongPtrW, LoadCursorW, RegisterClassW, SetWindowLongPtrW,
     CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, GWLP_USERDATA, IDC_ARROW, WNDCLASSW,
@@ -20,6 +21,7 @@ const WM_DESTROY: u32 = 0x0002;
 const WM_SIZE: u32 = 0x0005;
 const WM_ACTIVATE: u32 = 0x0006;
 const WM_COMMAND: u32 = 0x0111;
+const WM_NOTIFY: u32 = 0x004E;
 const WM_TIMER: u32 = 0x0113;
 const WM_NCCREATE: u32 = 0x0081;
 const WM_NCDESTROY: u32 = 0x0082;
@@ -88,6 +90,18 @@ unsafe extern "system" fn wndproc(
         WM_COMMAND => {
             app.on_command(wparam.0);
             LRESULT(0)
+        }
+        WM_NOTIFY => {
+            // SAFETY: WM_NOTIFY 的 lParam 一定是 NMHDR 开头的结构，本消息处理期间有效。
+            let header = unsafe { &*(lparam.0 as *const NMHDR) };
+            match header.code {
+                NM_CUSTOMDRAW => app.on_custom_draw(lparam),
+                NM_DBLCLK => {
+                    app.on_double_click(lparam);
+                    LRESULT(0)
+                }
+                _ => DefWindowProcW(hwnd, message, wparam, lparam),
+            }
         }
         WM_CTLCOLORSTATIC => {
             let hdc = HDC(wparam.0 as *mut core::ffi::c_void);

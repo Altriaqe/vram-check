@@ -1,0 +1,291 @@
+# 显存哨兵规则库（L1）
+#
+# 格式：进程名<TAB>风险<TAB>一句话
+# 风险：forbidden=禁止关闭 / caution=谨慎 / safe=一般可关（只是建议，不是授权）
+# 进程名不区分大小写。描述里不出现裸缩写；不确定就写"可能是"。
+#
+# 排序按类别，方便人工维护；匹配时忽略顺序。
+
+# ── Windows 核心与系统服务 ──────────────────────────────────────────
+dwm.exe	forbidden	桌面合成，系统必需，不能关
+explorer.exe	forbidden	桌面、任务栏和文件窗口，关掉会黑屏
+csrss.exe	forbidden	系统核心进程，不能关
+wininit.exe	forbidden	系统和登录初始化，不能关
+winlogon.exe	forbidden	登录会话管理，不能关
+services.exe	forbidden	Windows 服务管理，不能关
+lsass.exe	forbidden	登录凭据服务，不能关
+smss.exe	forbidden	会话管理，不能关
+svchost.exe	forbidden	Windows 服务宿主，不能关
+system	forbidden	内核持有的显存，不能关
+system idle process	forbidden	系统空闲进程，不是真的程序
+registry	forbidden	注册表持有的内存，不能关
+memory compression	forbidden	系统内存压缩，不能关
+secure system	forbidden	系统安全隔离进程，不能关
+fontdrvhost.exe	forbidden	字体服务，系统必需
+spoolsv.exe	forbidden	打印服务，系统必需
+audiodg.exe	forbidden	系统音频引擎，关掉会没声音
+lockapp.exe	forbidden	锁屏界面，不能关
+logonui.exe	forbidden	登录界面，不能关
+sgrmbroker.exe	forbidden	系统保护服务，不能关
+trustedinstaller.exe	forbidden	Windows 模块安装服务，不能关
+wudfhost.exe	forbidden	驱动框架宿主，不能关
+wudfcompanionhost.exe	forbidden	驱动框架宿主，不能关
+sihost.exe	caution	系统外壳服务宿主，一般不用管
+taskhostw.exe	caution	系统任务宿主，关掉可能影响后台任务
+ctfmon.exe	caution	输入法服务，关掉可能打不出中文
+textinputhost.exe	caution	输入法和表情面板，关掉暂时没输入法
+shellexperiencehost.exe	caution	开始菜单和通知界面，关掉会闪一下
+startmenuexperiencehost.exe	caution	开始菜单，关掉会闪一下
+searchhost.exe	caution	搜索界面，关掉搜索会打不开
+searchindexer.exe	caution	搜索索引服务，关掉搜索会变慢
+applicationframehost.exe	caution	通用应用外壳，关掉会带走子窗口
+runtimebroker.exe	caution	应用权限代理，关掉可能影响商店应用
+dllhost.exe	caution	COM 代理进程，关掉可能影响某些程序
+conhost.exe	caution	命令行窗口宿主，关掉会带走命令行
+securityhealthservice.exe	caution	Windows 安全中心服务，关掉会降低防护
+msmpeng.exe	forbidden	Windows Defender 扫描引擎，关掉会降低防护
+nissrv.exe	caution	Windows Defender 网络检查，关掉会降低防护
+wuauclt.exe	caution	Windows 更新，关掉本次更新会中断
+tiworker.exe	caution	Windows 更新安装，关掉本次更新会中断
+usoclient.exe	caution	Windows 更新扫描
+mpdefendercoreservice.exe	forbidden	Windows Defender 核心服务，不能关
+
+# ── 显卡、音频与外设驱动 ────────────────────────────────────────────
+nvcontainer.exe	caution	NVIDIA 驱动服务，关掉会被重新拉起
+nvdisplay.container.exe	caution	NVIDIA 显示驱动服务，关掉会被重新拉起
+nvsphelper64.exe	caution	NVIDIA 显示辅助，一般不用管
+nvidia overlay.exe	safe	游戏内覆盖层，关掉只是没有浮层
+nvidia share.exe	caution	游戏录制和截图，关掉会停止录制
+nvidia web helper.exe	caution	NVIDIA 后台网页组件
+nvsmartmaxapp.exe	caution	NVIDIA 多屏工具
+nvtelemetrycontainer.exe	safe	NVIDIA 遥测服务，关掉不影响使用
+nvtopps.exe	caution	NVIDIA 优化服务
+igfxem.exe	caution	Intel 显卡事件服务
+igfxhk.exe	caution	Intel 显卡热键服务
+igfxtray.exe	caution	Intel 显卡托盘图标
+amdrsserv.exe	caution	AMD 显卡服务
+amdow.exe	caution	AMD 驱动面板
+atieclxx.exe	caution	AMD 显卡辅助服务
+rtkauduservice64.exe	caution	Realtek 音频服务
+rtkaudiouniversalservice.exe	caution	Realtek 音频服务
+nahimic3.exe	caution	Nahimic 音效，关掉会失去音效
+nahimicsvc64.exe	caution	Nahimic 音效服务
+armourycrate.exe	caution	华硕控制中心
+armourycrate.usersessionhelper.exe	caution	华硕控制中心辅助
+icue.exe	caution	海盗船外设灯效
+logioverlay.exe	caution	罗技外设浮层
+msiafterburner.exe	caution	微星超频工具，关掉会恢复默认
+rtss.exe	caution	帧率显示，关掉只是没有帧数
+hwinfo64.exe	caution	硬件监控，关掉会停止记录
+gpu-z.exe	safe	显卡信息工具，关掉没有影响
+
+# ── 安全软件 ────────────────────────────────────────────────────────
+avp.exe	caution	卡巴斯基核心，关掉会降低防护
+avpui.exe	caution	卡巴斯基界面，关掉会降低防护
+hipsdaemon.exe	caution	火绒安全服务，关掉会降低防护
+hipstray.exe	caution	火绒托盘，关掉会降低防护
+360tray.exe	caution	360 安全卫士托盘，关掉会降低防护
+zhudongfangyu.exe	caution	360 主动防御，关掉会降低防护
+qqpctray.exe	caution	腾讯电脑管家，关掉会降低防护
+qqpcrtp.exe	caution	腾讯电脑管家实时防护，关掉会降低防护
+ccsvchst.exe	caution	Symantec 安全服务
+mcap.exe	caution	McAfee 安全组件
+mcshield.exe	caution	McAfee 扫描引擎
+ekrn.exe	caution	ESET 安全服务
+avguard.exe	caution	Avira 防护服务
+bdagent.exe	caution	Bitdefender 代理
+csfalconservice.exe	forbidden	CrowdStrike 安全服务，不能关
+sentinelagent.exe	forbidden	SentinelOne 安全服务，不能关
+
+# ── 浏览器与网页组件 ────────────────────────────────────────────────
+chrome.exe	caution	浏览器，关掉会丢失未提交的网页内容
+msedge.exe	caution	浏览器，关掉会丢失未提交的网页内容
+firefox.exe	caution	浏览器，关掉会丢失未提交的网页内容
+opera.exe	caution	浏览器，关掉会丢失未提交的网页内容
+brave.exe	caution	浏览器，关掉会丢失未提交的网页内容
+vivaldi.exe	caution	浏览器，关掉会丢失未提交的网页内容
+360se.exe	caution	360 浏览器，关掉会丢失网页内容
+360chrome.exe	caution	360 极速浏览器，关掉会丢失网页内容
+qqbrowser.exe	caution	QQ 浏览器，关掉会丢失网页内容
+sogouexplorer.exe	caution	搜狗浏览器，关掉会丢失网页内容
+msedgewebview2.exe	caution	应用内嵌的网页界面，关掉会带走宿主应用的部分界面
+webviewhost.exe	caution	应用内嵌网页宿主，关掉会带走宿主界面
+chrome_proxy.exe	safe	Chrome 更新代理，关掉没有影响
+msedge_proxy.exe	safe	Edge 更新代理，关掉没有影响
+
+# ── 常用桌面应用（微信 / QQ / 办公） ────────────────────────────────
+wechat.exe	caution	微信，关掉会丢失未发送的消息
+weixin.exe	caution	微信，关掉会丢失未发送的消息
+wechatappex.exe	caution	微信小程序或内嵌网页，关掉会关掉小程序
+wechatplayer.exe	caution	微信视频播放组件，关掉会停止播放
+qq.exe	caution	QQ，关掉会丢消息
+qqnt.exe	caution	QQ，关掉会丢消息
+tim.exe	caution	TIM，关掉会丢消息
+dingtalk.exe	caution	钉钉，关掉会掉线
+feishu.exe	caution	飞书，关掉会掉线
+lark.exe	caution	飞书，关掉会掉线
+wxwork.exe	caution	企业微信，关掉会掉线
+tencentmeeting.exe	caution	腾讯会议，关掉会退出会议
+wemeetapp.exe	caution	腾讯会议，关掉会退出会议
+qqlive.exe	caution	腾讯视频，关掉会停止播放
+iqiyi.exe	caution	爱奇艺，关掉会停止播放
+youkuclient.exe	caution	优酷，关掉会停止播放
+bilibili.exe	caution	哔哩哔哩，关掉会停止播放
+baidunetdisk.exe	caution	百度网盘，关掉会停止传输
+baidunetdiskhost.exe	caution	百度网盘组件，关掉会停止传输
+thunder.exe	caution	迅雷，关掉会停止下载
+
+# ── 游戏与启动器 ────────────────────────────────────────────────────
+steam.exe	caution	Steam，关掉会停止下载或游戏
+steamwebhelper.exe	caution	Steam 内嵌网页，关掉会关掉商店页面
+epicgameslauncher.exe	caution	Epic 启动器，关掉会停止下载
+battle.net.exe	caution	战网，关掉会停止下载
+galaxyclient.exe	caution	GOG Galaxy，关掉会停止同步
+riotclientservices.exe	caution	Riot 客户端，关掉会掉线
+leagueclientux.exe	caution	英雄联盟客户端，关掉会退出对局
+wegame.exe	caution	WeGame，关掉会停止下载或游戏
+ubisoftconnect.exe	caution	育碧客户端，关掉会掉线
+eadesktop.exe	caution	EA 客户端，关掉会掉线
+hoyoplay.exe	caution	米哈游启动器，关掉会停止更新
+yuanshen.exe	caution	原神，关掉会掉线
+genshinimpact.exe	caution	原神，关掉会掉线
+starrail.exe	caution	崩坏：星穹铁道，关掉会掉线
+zenlesszonezero.exe	caution	绝区零，关掉会掉线
+cs2.exe	caution	Counter-Strike 2，关掉会退出对局
+valorant-win64-shipping.exe	caution	无畏契约，关掉会退出对局
+dota2.exe	caution	Dota 2，关掉会退出对局
+pubg.exe	caution	PUBG，关掉会退出对局
+tslgame.exe	caution	PUBG，关掉会退出对局
+gta5.exe	caution	GTA V，关掉会丢失进度
+rdr2.exe	caution	荒野大镖客 2，关掉会丢失进度
+cyberpunk2077.exe	caution	赛博朋克 2077，关掉会丢失进度
+eldenring.exe	caution	艾尔登法环，关掉会丢失进度
+forzahorizon5.exe	caution	极限竞速：地平线 5，关掉会丢失进度
+
+# ── 开发工具与运行时 ────────────────────────────────────────────────
+code.exe	caution	VS Code，关掉会丢未保存文件
+code - insiders.exe	caution	VS Code 预览版，关掉会丢未保存文件
+cursor.exe	caution	Cursor 编辑器，关掉会丢未保存文件
+windsurf.exe	caution	Windsurf 编辑器，关掉会丢未保存文件
+idea64.exe	caution	IntelliJ IDEA，关掉会中断构建
+pycharm64.exe	caution	PyCharm，关掉会中断训练或调试
+webstorm64.exe	caution	WebStorm，关掉会中断构建
+clion64.exe	caution	CLion，关掉会中断构建
+goland64.exe	caution	GoLand，关掉会中断构建
+rider64.exe	caution	Rider，关掉会中断构建
+studio64.exe	caution	Android Studio，关掉会中断构建
+devenv.exe	caution	Visual Studio，关掉会丢未保存文件
+sublime_text.exe	caution	Sublime Text，关掉会丢未保存文件
+notepad++.exe	caution	Notepad++，关掉会丢未保存文件
+gvim.exe	caution	GVim，关掉会丢未保存文件
+java.exe	caution	Java 程序，可能是 Minecraft 或企业应用
+javaw.exe	caution	Java 后台程序，可能是 Minecraft 或企业应用
+node.exe	caution	Node.js 进程，可能是开发服务器
+deno.exe	caution	Deno 进程，可能是开发服务器
+bun.exe	caution	Bun 进程，可能是开发服务器
+docker desktop.exe	caution	Docker Desktop，关掉会停掉容器
+windowsterminal.exe	caution	终端窗口，里面可能在跑任务
+powershell.exe	caution	PowerShell 窗口，里面可能在跑任务
+pwsh.exe	caution	PowerShell 窗口，里面可能在跑任务
+cmd.exe	caution	命令行窗口，里面可能在跑任务
+wsl.exe	caution	Linux 子系统会话，关掉会中断里面的任务
+wslhost.exe	caution	Linux 子系统宿主，关掉会中断里面的任务
+msbuild.exe	caution	构建进程，关掉会中断构建
+dotnet.exe	caution	.NET 程序，可能是构建或服务
+
+# ── AI / 模型相关 ───────────────────────────────────────────────────
+python.exe	caution	Python 程序，可能是训练或推理脚本
+pythonw.exe	caution	后台 Python 程序，可能是训练或推理脚本
+python3.exe	caution	Python 程序，可能是训练或推理脚本
+jupyter.exe	caution	Jupyter，关掉会丢内核状态
+jupyter-notebook.exe	caution	Jupyter Notebook，关掉会丢内核状态
+jupyter-lab.exe	caution	JupyterLab，关掉会丢内核状态
+ollama.exe	caution	Ollama 服务，关掉会中断模型
+ollama_llama_server.exe	caution	Ollama 推理进程，关掉会中断生成
+lm studio.exe	caution	LM Studio，关掉会中断模型
+lmstudio.exe	caution	LM Studio，关掉会中断模型
+koboldcpp.exe	caution	KoboldCpp，关掉会中断生成
+llama-server.exe	caution	llama.cpp 服务，关掉会中断生成
+claude.exe	caution	Claude 桌面端，关掉会丢对话草稿
+chatgpt.exe	caution	ChatGPT 桌面端，关掉会丢对话草稿
+
+# ── 媒体、创作与办公 ────────────────────────────────────────────────
+vlc.exe	caution	VLC，关掉会停止播放
+mpv.exe	caution	mpv，关掉会停止播放
+potplayermini64.exe	caution	PotPlayer，关掉会停止播放
+potplayermini.exe	caution	PotPlayer，关掉会停止播放
+kodi.exe	caution	Kodi，关掉会停止播放
+obs64.exe	caution	OBS，关掉会停止录制或直播
+obs32.exe	caution	OBS，关掉会停止录制或直播
+streamlabs desktop.exe	caution	Streamlabs，关掉会停止直播
+audacity.exe	caution	Audacity，关掉会丢未保存音频
+davinci resolve.exe	caution	DaVinci Resolve，关掉会丢未保存工程
+premiere pro.exe	caution	Premiere Pro，关掉会丢未保存工程
+afterfx.exe	caution	After Effects，关掉会丢未保存工程
+photoshop.exe	caution	Photoshop，关掉会丢未保存文件
+lightroom.exe	caution	Lightroom，关掉会中断导出
+blender.exe	caution	Blender，关掉会丢未保存工程
+handbrake.exe	caution	HandBrake，关掉会停止转码
+figma.exe	caution	Figma，关掉会丢未同步改动
+notion.exe	caution	Notion，关掉会丢未同步内容
+obsidian.exe	caution	Obsidian，关掉会丢未保存笔记
+postman.exe	caution	Postman，关掉会中断请求
+typora.exe	caution	Typora，关掉会丢未保存文档
+
+# ── 通讯与会议 ──────────────────────────────────────────────────────
+discord.exe	caution	Discord，关掉会掉线
+slack.exe	caution	Slack，关掉会掉线
+teams.exe	caution	Teams，关掉会掉线
+ms-teams.exe	caution	Teams，关掉会掉线
+zoom.exe	caution	Zoom，关掉会退出会议
+telegram.exe	caution	Telegram，关掉会掉线
+whatsapp.exe	caution	WhatsApp，关掉会掉线
+signal.exe	caution	Signal，关掉会掉线
+element.exe	caution	Element，关掉会掉线
+skype.exe	caution	Skype，关掉会掉线
+
+# ── 云盘与同步 ──────────────────────────────────────────────────────
+onedrive.exe	caution	OneDrive，关掉会停止同步
+dropbox.exe	caution	Dropbox，关掉会停止同步
+googledrivefs.exe	caution	Google 云端硬盘，关掉会停止同步
+megasync.exe	caution	MEGA，关掉会停止同步
+pcloud.exe	caution	pCloud，关掉会停止同步
+synologydrive.exe	caution	群晖 Drive，关掉会停止同步
+nextcloud.exe	caution	Nextcloud，关掉会停止同步
+onedrivestandaloneupdater.exe	safe	OneDrive 更新器，关掉没有影响
+
+# ── 桌面工具 ────────────────────────────────────────────────────────
+everything.exe	safe	文件搜索索引，关掉可重启
+translucenttb.exe	safe	任务栏透明工具，关掉只是失去效果
+powertoys.exe	caution	PowerToys 工具集，关掉会失去快捷键
+autohotkey.exe	caution	AutoHotkey 脚本，关掉会失效
+autohotkeyu64.exe	caution	AutoHotkey 脚本，关掉会失效
+sharex.exe	caution	ShareX，关掉会失去截图热键
+snipaste.exe	caution	Snipaste，关掉会失去截图热键
+ditto.exe	caution	Ditto 剪贴板历史，关掉会失去历史
+rainmeter.exe	caution	Rainmeter 桌面组件，关掉会失去桌面小部件
+winrar.exe	caution	WinRAR，关掉会中断压缩
+
+# ── 远程桌面与虚拟显示 ──────────────────────────────────────────────
+todesk.exe	caution	ToDesk，关掉会断开远程
+todesk_session.exe	caution	ToDesk 会话，关掉会断开远程
+sunloginclient.exe	caution	向日葵，关掉会断开远程
+anydesk.exe	caution	AnyDesk，关掉会断开远程
+teamviewer.exe	caution	TeamViewer，关掉会断开远程
+teamviewer_service.exe	caution	TeamViewer 服务，关掉会断开远程
+rustdesk.exe	caution	RustDesk，关掉会断开远程
+gameviewer.exe	caution	GameViewer 远程串流，关掉会断开
+mumuplayer.exe	caution	MuMu 模拟器，关掉会退出
+mumuvmmheadless.exe	caution	MuMu 模拟器内核，关掉会退出
+nemuplayer.exe	caution	MuMu 模拟器，关掉会退出
+
+# ── 商店应用与系统界面 ──────────────────────────────────────────────
+gamebar.exe	caution	Xbox Game Bar，关掉会失去录屏浮层
+gamebarftserver.exe	caution	Xbox Game Bar 组件
+widgets.exe	caution	Windows 小组件，关掉只是没有小组件
+widgetservice.exe	caution	Windows 小组件服务
+phoneexperiencehost.exe	caution	手机连接，关掉会断开手机
+crossdeviceresume.exe	caution	跨设备继续，关掉会影响接力
+shellhost.exe	caution	Windows 外壳宿主，关掉可能闪一下
+systemsettings.exe	caution	设置窗口，关掉会丢未保存设置
+microsoft.photos.exe	caution	照片应用，关掉会丢未保存编辑

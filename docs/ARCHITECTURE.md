@@ -115,40 +115,49 @@ UI 线程                         采样线程
 ## 5. 核心数据结构
 
 ```rust
-// data/model.rs
+// vendor/dxgi.rs
 pub struct AdapterInfo {
-    pub luid: (i32, u32),
+    pub luid: u64,
     pub name: String,
     pub dedicated_bytes: u64,   // DXGI DedicatedVideoMemory —— 唯一的容量来源
     pub is_software: bool,      // 虚拟显卡（ToDesk/向日葵…）标记为 true
 }
 
+// data/model.rs
 pub struct ProcSample {
     pub pid: u32,
     pub name: String,           // Toolhelp32；SYSTEM 进程也能拿到
+    pub parent_pid: u32,        // 进程树聚合用
     pub local_bytes: u64,       // 主口径
     pub nonlocal_bytes: u64,    // 共享内存
-    pub dedicated_bytes: Option<u64>, // 仅"技术详情"用
     pub gpu_pct: Option<f32>,   // max(engine)，不是 sum
-    pub start_time: Option<u64>,
+    pub has_window: bool,       // 有可见顶层窗口 → 风险升级
+}
+
+pub struct GroupMember {
+    pub pid: u32,
+    pub name: String,
+    pub local_bytes: u64,
+    pub gpu_pct: Option<f32>,
+    pub has_window: bool,
 }
 
 pub struct AppGroup {
     pub root_pid: u32,
+    pub root_name: String,      // 规则匹配用
     pub title: String,          // "python.exe × 3"
     pub local_bytes: u64,
-    pub members: Vec<u32>,
-    pub risk: Risk,
-    pub desc: String,
-    pub evidence: Evidence,     // 描述依据，供"点开看为什么"
+    pub nonlocal_bytes: u64,
+    pub gpu_pct: Option<f32>,
+    pub has_window: bool,
+    pub members: Vec<GroupMember>, // 展开分组时显示
 }
 
-pub enum Risk { Forbidden, Caution, Safe, Unknown }
-
 pub struct Snapshot {
-    pub taken_at: Instant,
+    pub adapter_name: String,
     pub capacity_bytes: u64,
-    pub adapter_used: u64,
+    pub adapter_used: Option<u64>, // 读不到时 None，不是 0
+    pub total_local: u64,
     pub groups: Vec<AppGroup>,
     pub unattributed: Unattributed,
 }
@@ -160,7 +169,7 @@ pub enum Unattributed {
 }
 ```
 
-> **M1 实现差异（2026-11-14）**：`ProcSample` 暂无 `dedicated_bytes` / `start_time`（技术详情与 PID 复用检测留到 M2/M3），增加 `parent_pid` 用于分组；`AppGroup` 暂只保留 `root_pid/title/local_bytes/gpu_pct/members`，`risk/desc` 由 UI 层调用 `explain` 现算（避免 `data` 反向依赖 `explain`）；`Snapshot` 的 `taken_at` 等做历史曲线时再加，`adapter_used` 改为 `Option<u64>`——读不到时是 `None`，不是 `0`。
+> **M2 实现状态（2026-11-14）**：风险与文案不放进 `data`——`explain/classify.rs` 用 `RuleRisk + 有窗口 + GPU%` 算 `Risk`，`explain/render.rs` 拼"风险词 + 原因是..."；`Snapshot` 的 `taken_at` 等做历史曲线时再加。`format.rs` 放在 `src/` 根（纯函数），`explain` 和 `ui` 都能用，避免让 `explain` 反向依赖 `ui`。
 
 ---
 
@@ -244,35 +253,36 @@ unattributed = adapter_used - Σ(local_bytes)
 vram-sentinel/
 ├── Cargo.toml
 ├── README.md
+├── SYNC.md                  交接班：测试纪律、下载纪律、环境台账
 ├── THIRD-PARTY-NOTICES.md
 ├── docs/
 │   ├── PRD.md
 │   ├── ARCHITECTURE.md
 │   ├── CONVENTIONS.md
 │   ├── DECISIONS.md
-│   └── M0-MEASUREMENTS.md
+│   ├── M0-MEASUREMENTS.md
+│   ├── M1-MEASUREMENTS.md
+│   └── assets/              界面截图
 └── src/
     ├── main.rs              入口、单实例互斥、DPI 感知
-    ├── app.rs               生命周期、消息循环、托盘(可选)
+    ├── app.rs               生命周期、消息循环、行模型、自定义绘制
+    ├── format.rs            数字格式化（纯函数，explain 与 ui 共用）
     ├── vendor/
-    │   ├── VENDOR.md        上游 commit / 改动清单
-    │   ├── pdh.rs           改：Dedicated → Local
-    │   └── dxgi.rs          原样
+    │   ├── pdh.rs           常驻查询 + 实例名解析
+    │   └── dxgi.rs          适配器枚举 + 容量
     ├── data/
-    │   ├── probe.rs         启动时能力探测、降级判定
-    │   ├── sampler.rs       常驻查询、增量 counter、采样线程
-    │   └── model.rs         上面的数据结构 + 聚合算法
+    │   ├── windows.rs       可见窗口 → pid（只读）
+    │   ├── sampler.rs       采样线程、进程表缓存、GPU% 缓存
+    │   └── model.rs         数据结构 + 进程树聚合
     ├── explain/
-    │   ├── rules.tsv        200 条规则（数据）
-    │   ├── rules.rs         加载与匹配
+    │   ├── rules.tsv        256 条规则（数据）
+    │   ├── rules.rs         TSV 解析与匹配
     │   ├── classify.rs      风险分级
     │   └── render.rs        文案拼装（铁律在这里落地）
-    ├── action/
-    │   └── close.rs         WM_CLOSE → 等待 → TerminateProcess → 实测回收
+    ├── action/              ⬜ M3
     └── ui/
-        ├── window.rs        主窗口、头部总览条
-        ├── listview.rs      owner-draw、排序、多选、键盘
-        └── format.rs        数字格式化（GB/MB、可感类比）
+        ├── window.rs        窗口过程、消息分派
+        └── listview.rs      ListView 封装、列、行、滚动位置
 ```
 
 ---

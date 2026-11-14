@@ -1,64 +1,123 @@
-//! 进程名 → 一句话。M1 的规则表，M2 换成 TSV 数据文件。
+//! 规则库：启动时解析一次，热路径只读。
 //!
-//! 文案铁律：带"因为"、不裸缩写、不恐吓、不知道就说不知道。
+//! 数据在 `rules.tsv`，一行一条：进程名、风险、一句人话。
+//! 解析失败的行直接跳过——规则库缺一条，不能让整个程序起不来。
 
-/// (进程名, 描述)。匹配进程名，忽略大小写；标题里的 " × 3" 会先剥掉。
-const RULES: &[(&str, &str)] = &[
-    ("dwm.exe", "桌面合成，系统必需，不能关"),
-    ("explorer.exe", "桌面和任务栏，关掉会黑屏"),
-    ("csrss.exe", "系统核心进程，不能关"),
-    ("wininit.exe", "系统核心进程，不能关"),
-    ("winlogon.exe", "登录会话管理，不能关"),
-    ("services.exe", "Windows 服务管理，不能关"),
-    ("lsass.exe", "登录凭据服务，不能关"),
-    ("smss.exe", "会话管理，不能关"),
-    ("svchost.exe", "Windows 服务宿主，不能关"),
-    ("System", "内核与驱动持有的显存，不能关"),
-    ("[kernel]", "内核与驱动持有的显存，不能关"),
-    ("python.exe", "Python 程序，可能是训练或推理脚本"),
-    ("pythonw.exe", "后台 Python 程序，可能是训练或推理脚本"),
-    ("chrome.exe", "浏览器，多半是后台标签页"),
-    ("msedge.exe", "浏览器，多半是后台标签页"),
-    ("firefox.exe", "浏览器，多半是后台标签页"),
-    ("msedgewebview2.exe", "应用内嵌的网页界面"),
-    ("Code.exe", "VS Code 编辑器，可能挂着终端任务"),
-    ("idea64.exe", "JetBrains IDE，可能正在跑构建"),
-    ("pycharm64.exe", "PyCharm，可能正在跑训练"),
-    ("node.exe", "Node.js 进程，可能是开发服务器"),
-    ("WindowsTerminal.exe", "终端窗口，里面可能在跑任务"),
-    ("powershell.exe", "PowerShell 窗口，里面可能在跑任务"),
-    ("pwsh.exe", "PowerShell 窗口，里面可能在跑任务"),
-    ("cmd.exe", "命令行窗口，里面可能在跑任务"),
-    ("MsMpEng.exe", "Windows Defender 扫描，系统必需"),
-    ("NVIDIA Overlay.exe", "NVIDIA 游戏内覆盖，一般可关"),
-];
+use std::collections::HashMap;
+use std::sync::OnceLock;
 
-/// 给标题（可能是 "python.exe × 3"）配一句描述；不认识返回 `—`。
-pub fn describe(title: &str) -> &'static str {
-    let name = title.split(" × ").next().unwrap_or(title).trim();
-    RULES
-        .iter()
-        .find(|(rule_name, _)| name.eq_ignore_ascii_case(rule_name))
-        .map(|(_, desc)| *desc)
-        .unwrap_or("—")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleRisk {
+    Forbidden,
+    Caution,
+    Safe,
+}
+
+#[derive(Debug, Clone)]
+pub struct Rule {
+    pub risk: RuleRisk,
+    pub desc: String,
+}
+
+pub struct Rules {
+    map: HashMap<String, Rule>,
+}
+
+impl Rules {
+    pub fn from_tsv(text: &str) -> Self {
+        let mut map = HashMap::new();
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let mut fields = line.split('\t');
+            let (Some(name), Some(risk), Some(desc)) =
+                (fields.next(), fields.next(), fields.next())
+            else {
+                continue;
+            };
+            let name = name.trim().to_ascii_lowercase();
+            let desc = desc.trim();
+            if name.is_empty() || desc.is_empty() {
+                continue;
+            }
+            let Some(risk) = parse_risk(risk.trim()) else {
+                continue;
+            };
+            map.entry(name).or_insert(Rule {
+                risk,
+                desc: desc.to_string(),
+            });
+        }
+        Self { map }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<&Rule> {
+        self.map.get(&name.to_ascii_lowercase())
+    }
+
+    #[cfg(test)]
+    pub fn count(&self) -> usize {
+        self.map.len()
+    }
+}
+
+fn parse_risk(token: &str) -> Option<RuleRisk> {
+    match token {
+        "forbidden" => Some(RuleRisk::Forbidden),
+        "caution" => Some(RuleRisk::Caution),
+        "safe" => Some(RuleRisk::Safe),
+        _ => None,
+    }
+}
+
+static RULES: OnceLock<Rules> = OnceLock::new();
+
+/// 全局规则库（首次访问时解析，约 0.2 ms）。
+pub fn rules() -> &'static Rules {
+    RULES.get_or_init(|| Rules::from_tsv(include_str!("rules.tsv")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const SAMPLE: &str = "\
+# 注释不算
+dwm.exe\tforbidden\t桌面合成，系统必需
+python.exe\tcaution\tPython 程序
+nahan.exe\tsafe\t后台工具
+bad.exe\tmaybe\t风险写错了
+only-two\tcolumns
+dup.exe\tsafe\t第一次生效
+dup.exe\tforbidden\t第二次应被忽略
+";
+
     #[test]
-    fn matches_exact_and_grouped_titles() {
-        assert_eq!(describe("dwm.exe"), "桌面合成，系统必需，不能关");
-        assert_eq!(
-            describe("python.exe × 3"),
-            "Python 程序，可能是训练或推理脚本"
-        );
-        assert_eq!(describe("CHROME.EXE × 12"), "浏览器，多半是后台标签页");
+    fn parses_valid_lines_and_skips_bad_ones() {
+        let rules = Rules::from_tsv(SAMPLE);
+        assert_eq!(rules.count(), 4);
+        let dwm = rules.lookup("DWM.EXE").unwrap();
+        assert_eq!(dwm.risk, RuleRisk::Forbidden);
+        assert_eq!(dwm.desc, "桌面合成，系统必需");
+        assert_eq!(rules.lookup("nahan.exe").unwrap().risk, RuleRisk::Safe);
+        assert!(rules.lookup("bad.exe").is_none());
+        assert!(rules.lookup("only-two").is_none());
     }
 
     #[test]
-    fn unknown_says_unknown() {
-        assert_eq!(describe("mystery.exe"), "—");
+    fn duplicate_keeps_first() {
+        let rules = Rules::from_tsv(SAMPLE);
+        assert_eq!(rules.lookup("dup.exe").unwrap().risk, RuleRisk::Safe);
+    }
+
+    #[test]
+    fn real_rules_file_has_enough_coverage() {
+        let rules = rules();
+        assert!(rules.count() >= 200, "规则只有 {} 条", rules.count());
+        assert_eq!(rules.lookup("dwm.exe").unwrap().risk, RuleRisk::Forbidden);
+        assert_eq!(rules.lookup("python.exe").unwrap().risk, RuleRisk::Caution);
+        assert!(rules.lookup("no-such-process.exe").is_none());
     }
 }

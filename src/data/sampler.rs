@@ -3,9 +3,9 @@
 //! 线程模型见 `docs/ARCHITECTURE.md` §4：采样线程不碰任何窗口；
 //! 数据经 `mpsc` 传回 UI，`PostMessageW` 只做唤醒。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, WAIT_OBJECT_0};
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -42,6 +42,12 @@ struct ProcessInfo {
 pub struct Sampler {
     counters: CounterSet,
     adapter: AdapterInfo,
+    /// GPU% 每隔一轮采一次：它最贵（437 个引擎实例），而 2 秒的迟滞用户感觉不到。
+    engine_cache: HashMap<u32, f32>,
+    tick: u64,
+    /// 进程名/父进程缓存：Toolhelp 枚举 336 个进程要 6–12 ms，没必要每秒做。
+    procs: HashMap<u32, ProcessInfo>,
+    procs_at: Instant,
 }
 
 impl Sampler {
@@ -51,7 +57,14 @@ impl Sampler {
         // 速率型计数器（GPU%）需要两个采样点才有值；先采一次，稍后 sample() 再采。
         let _ = counters.collect();
         std::thread::sleep(Duration::from_millis(120));
-        Ok(Self { counters, adapter })
+        Ok(Self {
+            counters,
+            adapter,
+            engine_cache: HashMap::new(),
+            tick: 0,
+            procs: HashMap::new(),
+            procs_at: Instant::now(),
+        })
     }
 
     /// 采一轮。任何一条数据读不到都宁可缺失，也不写 0。
@@ -59,15 +72,16 @@ impl Sampler {
         self.counters.collect().map_err(SampleError::Collect)?;
         let local = self.counters.read_array(0).map_err(SampleError::Read)?;
         let nonlocal = self.counters.read_array(1).map_err(SampleError::Read)?;
-        let engine = self.counters.read_array(2).map_err(SampleError::Read)?;
+        self.tick = self.tick.wrapping_add(1);
+        let engine = if self.tick % 2 == 1 {
+            Some(self.counters.read_array(2).map_err(SampleError::Read)?)
+        } else {
+            None
+        };
         let adapter_rows = self.counters.read_array(3).map_err(SampleError::Read)?;
-
-        let procs = process_table()?;
         let want_luid = self.adapter.luid;
 
-        // pid -> 采样值；只保留有显存的进程（M0：314 个进程里只有 32 个）。
-        let mut per_pid: HashMap<u32, ProcSample> = HashMap::new();
-
+        let mut local_map: HashMap<u32, u64> = HashMap::new();
         for (name, value) in &local {
             let Some(instance) = parse_instance(name) else {
                 continue;
@@ -76,12 +90,10 @@ impl Sampler {
                 continue;
             }
             let Some(pid) = instance.pid else { continue };
-            let entry = per_pid
-                .entry(pid)
-                .or_insert_with(|| base_sample(pid, &procs));
-            entry.local_bytes = entry.local_bytes.saturating_add(*value as u64);
+            *local_map.entry(pid).or_insert(0) += *value as u64;
         }
 
+        let mut nonlocal_map: HashMap<u32, u64> = HashMap::new();
         for (name, value) in &nonlocal {
             let Some(instance) = parse_instance(name) else {
                 continue;
@@ -90,32 +102,44 @@ impl Sampler {
                 continue;
             }
             let Some(pid) = instance.pid else { continue };
-            let entry = per_pid
-                .entry(pid)
-                .or_insert_with(|| base_sample(pid, &procs));
-            entry.nonlocal_bytes = entry.nonlocal_bytes.saturating_add(*value as u64);
+            *nonlocal_map.entry(pid).or_insert(0) += *value as u64;
         }
 
-        // GPU% 取最忙引擎，不能求和。
-        for (name, value) in &engine {
-            let Some(instance) = parse_instance(name) else {
-                continue;
-            };
-            if instance.luid != want_luid {
-                continue;
+        // GPU% 取最忙引擎，不能求和；每两轮刷新一次缓存。
+        if let Some(engine) = &engine {
+            let mut fresh: HashMap<u32, f32> = HashMap::new();
+            for (name, value) in engine {
+                let Some(instance) = parse_instance(name) else {
+                    continue;
+                };
+                if instance.luid != want_luid {
+                    continue;
+                }
+                let Some(pid) = instance.pid else { continue };
+                let pct = (*value as f32).clamp(0.0, 100.0);
+                fresh
+                    .entry(pid)
+                    .and_modify(|old| *old = old.max(pct))
+                    .or_insert(pct);
             }
-            let Some(pid) = instance.pid else { continue };
-            let pct = (*value as f32).clamp(0.0, 100.0);
-            let entry = per_pid
-                .entry(pid)
-                .or_insert_with(|| base_sample(pid, &procs));
-            entry.gpu_pct = Some(entry.gpu_pct.map_or(pct, |old| old.max(pct)));
+            self.engine_cache = fresh;
         }
 
-        let mut samples: Vec<ProcSample> = per_pid
-            .into_values()
-            .filter(|s| s.local_bytes > 0)
-            .collect();
+        let needed: Vec<u32> = local_map.keys().copied().collect();
+        self.ensure_process_table(&needed)?;
+        let window_pids = super::windows::visible_window_pids();
+
+        let mut samples: Vec<ProcSample> = Vec::with_capacity(local_map.len());
+        for (pid, bytes) in local_map {
+            let mut sample = base_sample(pid, &self.procs, &window_pids);
+            sample.local_bytes = bytes;
+            sample.nonlocal_bytes = nonlocal_map.remove(&pid).unwrap_or(0);
+            sample.gpu_pct = self.engine_cache.get(&pid).copied();
+            samples.push(sample);
+        }
+
+        let alive: HashSet<u32> = samples.iter().map(|s| s.pid).collect();
+        self.engine_cache.retain(|pid, _| alive.contains(pid));
         samples.sort_unstable_by_key(|s| std::cmp::Reverse(s.local_bytes));
 
         let total_local: u64 = samples.iter().map(|s| s.local_bytes).sum();
@@ -134,6 +158,20 @@ impl Sampler {
             groups,
             unattributed,
         })
+    }
+
+    /// 进程表按 5 秒节流刷新；遇到没见过的 pid 立刻补一次（但最多每秒一次）。
+    /// 刷新尽量放在不读 GPU% 的偶数轮，避免两个最贵的操作叠在同一次采样里。
+    fn ensure_process_table(&mut self, needed: &[u32]) -> Result<(), SampleError> {
+        let stale = self.procs.is_empty() || self.procs_at.elapsed() >= Duration::from_secs(5);
+        let missing = needed.iter().any(|pid| !self.procs.contains_key(pid));
+        let retry_missing = missing && self.procs_at.elapsed() >= Duration::from_secs(1);
+        let refresh = self.procs.is_empty() || retry_missing || (stale && self.tick % 2 == 0);
+        if refresh {
+            self.procs = process_table()?;
+            self.procs_at = Instant::now();
+        }
+        Ok(())
     }
 }
 
@@ -299,7 +337,11 @@ fn post(hwnd: HWND, message: u32, wparam: usize, lparam: isize) {
     }
 }
 
-fn base_sample(pid: u32, procs: &HashMap<u32, ProcessInfo>) -> ProcSample {
+fn base_sample(
+    pid: u32,
+    procs: &HashMap<u32, ProcessInfo>,
+    window_pids: &HashSet<u32>,
+) -> ProcSample {
     let info = procs.get(&pid);
     let mut name = info
         .map(|i| i.name.clone())
@@ -315,6 +357,7 @@ fn base_sample(pid: u32, procs: &HashMap<u32, ProcessInfo>) -> ProcSample {
         local_bytes: 0,
         nonlocal_bytes: 0,
         gpu_pct: None,
+        has_window: window_pids.contains(&pid),
     }
 }
 

@@ -1,4 +1,6 @@
 //! 数字格式化：界面上只说人话。
+//!
+//! 纯函数、无 Win32，`ui` 与 `explain` 都可以用。
 
 const KB: u64 = 1024;
 const MB: u64 = 1024 * KB;
@@ -12,6 +14,16 @@ pub fn bytes(value: u64) -> String {
         format!("{:.0} MB", value as f64 / MB as f64)
     } else {
         format!("{:.0} KB", value as f64 / KB as f64)
+    }
+}
+
+/// 大数字补一个人能感知的类比；没有合适的就不硬加。
+pub fn bytes_friendly(value: u64) -> String {
+    let base = bytes(value);
+    if (GB..2 * GB).contains(&value) {
+        format!("{base}（约一部 1080p 电影）")
+    } else {
+        base
     }
 }
 
@@ -34,6 +46,12 @@ mod tests {
         assert_eq!(bytes(700 * MB), "700 MB");
         assert_eq!(bytes(43 * MB), "43 MB");
         assert_eq!(bytes(512 * KB), "512 KB");
+    }
+
+    #[test]
+    fn adds_analogy_only_when_it_helps() {
+        assert_eq!(bytes_friendly(1536 * MB), "1.50 GB（约一部 1080p 电影）");
+        assert_eq!(bytes_friendly(8 * GB), "8.00 GB");
     }
 
     #[test]

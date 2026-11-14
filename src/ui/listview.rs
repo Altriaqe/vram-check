@@ -10,6 +10,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 const LVM_DELETEALLITEMS: u32 = 0x1009;
+const LVM_GETTOPINDEX: u32 = 0x1027;
+const LVM_ENSUREVISIBLE: u32 = 0x1013;
 const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
 const LVM_INSERTCOLUMNW: u32 = 0x1061; // LVM_FIRST + 97
 const LVM_INSERTITEMW: u32 = 0x104D;
@@ -77,6 +79,20 @@ pub fn set_columns(list: HWND, columns: &[(&str, i32)]) {
                 WPARAM(index),
                 LPARAM(&mut column as *mut _ as isize),
             );
+        }
+    }
+}
+
+/// 当前滚到最上面的行号。
+pub fn top_index(list: HWND) -> i32 {
+    unsafe { SendMessageW(list, LVM_GETTOPINDEX, WPARAM(0), LPARAM(0)).0 as i32 }
+}
+
+/// 整表重建后把滚动位置放回原处，别让列表每秒跳回顶部。
+pub fn ensure_visible(list: HWND, index: i32) {
+    if index > 0 {
+        unsafe {
+            SendMessageW(list, LVM_ENSUREVISIBLE, WPARAM(index as usize), LPARAM(0));
         }
     }
 }

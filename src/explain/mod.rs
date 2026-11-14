@@ -1,8 +1,10 @@
-//! 解释层：给每一行一句人话。
+//! 解释层：规则库 · 风险分级 · 文案拼装。
 //!
-//! M1 只带最小规则集；M2 再扩成 `rules.tsv`（200 条）+ 签名 + 启发式。
-//! 不认识就返回 `—`——说错比不解释伤害大 10 倍。
+//! 纯逻辑，不碰 Win32；输入是 `data` 的模型，输出是给人看的句子。
 
-mod rules;
+pub mod classify;
+pub mod render;
+pub mod rules;
 
-pub use rules::describe;
+pub use classify::Risk;
+pub use render::{render_group, render_member};

@@ -2,6 +2,7 @@
 
 pub mod model;
 pub mod sampler;
+pub mod windows;
 
 /// 采样失败的分类。区分"系统不支持"（要降级）和"这次失败"（要跳过）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
