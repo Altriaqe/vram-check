@@ -1,4 +1,4 @@
-﻿# 打发布包：守门 → 复制 exe/文档 → 压缩 → 写 SHA256
+﻿# 打发布包：守门 → 复制 exe/文档 → 压缩
 #
 # 用法：
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1
@@ -7,7 +7,6 @@
 # 产物在 release\ 下：
 #   vram-check.exe
 #   vram-check-<版本>-win64.zip
-#   SHA256SUMS.txt
 
 param([switch]$SkipBuild)
 
@@ -43,18 +42,11 @@ try {
         (Join-Path $out 'THIRD-PARTY-NOTICES.md')
     ) -DestinationPath $zip -Force
 
-    $exeHash = (Get-FileHash (Join-Path $out 'vram-check.exe') -Algorithm SHA256).Hash
-    $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash
-    @(
-        "$exeHash  vram-check.exe"
-        "$zipHash  vram-check-$version-win64.zip"
-    ) | Set-Content -Path (Join-Path $out 'SHA256SUMS.txt') -Encoding ASCII
-
     $exeSize = [math]::Round((Get-Item (Join-Path $out 'vram-check.exe')).Length / 1KB)
     $zipSize = [math]::Round((Get-Item $zip).Length / 1KB)
     "版本: $version"
-    "exe : release\vram-check.exe（$exeSize KB） sha256=$exeHash"
-    "zip : release\vram-check-$version-win64.zip（$zipSize KB） sha256=$zipHash"
+    "exe : release\vram-check.exe（$exeSize KB）"
+    "zip : release\vram-check-$version-win64.zip（$zipSize KB）"
 }
 finally {
     Pop-Location
