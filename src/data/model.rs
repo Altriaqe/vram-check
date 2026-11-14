@@ -81,6 +81,24 @@ pub enum Mode {
     Memory,
 }
 
+/// exe 版本资源里能读到的自述信息。规则库没有时用它兜底。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FileMeta {
+    pub description: Option<String>,
+    pub product: Option<String>,
+    pub company: Option<String>,
+    pub version: Option<String>,
+}
+
+impl FileMeta {
+    pub fn is_empty(&self) -> bool {
+        self.description.is_none()
+            && self.product.is_none()
+            && self.company.is_none()
+            && self.version.is_none()
+    }
+}
+
 /// 一次采样。
 #[derive(Debug)]
 pub struct Snapshot {
@@ -92,6 +110,8 @@ pub struct Snapshot {
     pub total_local: u64,
     pub groups: Vec<AppGroup>,
     pub unattributed: Unattributed,
+    /// 按小写程序名索引的版本信息，用于未知程序兜底。
+    pub file_meta: HashMap<String, FileMeta>,
 }
 
 /// 进程树里作为"墙"的系统进程：它们自己成组，不把子进程并进来。

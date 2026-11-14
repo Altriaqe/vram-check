@@ -1,5 +1,6 @@
 //! 数据层：唯一的"读"操作。UI 不知道有 PDH，这里也不知道有窗口。
 
+pub mod filemeta;
 pub mod model;
 pub mod sampler;
 pub mod windows;

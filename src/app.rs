@@ -463,10 +463,12 @@ impl App {
             };
             let mut rows = Vec::new();
             let show_gpu = snapshot.mode == Mode::Gpu;
+            let meta_for = |name: &str| snapshot.file_meta.get(&name.to_ascii_lowercase());
             match self.page {
                 Page::Live => {
                     for group in &snapshot.groups {
-                        let text = explain::render_group(group, show_gpu);
+                        let text =
+                            explain::render_group(group, show_gpu, meta_for(&group.root_name));
                         let expanded = self.expanded.contains(&group.root_pid);
                         let arrow = if group.members.len() > 1 {
                             if expanded {
@@ -488,7 +490,11 @@ impl App {
 
                         if expanded {
                             for member in &group.members {
-                                let member_text = explain::render_member(member, show_gpu);
+                                let member_text = explain::render_member(
+                                    member,
+                                    show_gpu,
+                                    meta_for(&member.name),
+                                );
                                 rows.push(DisplayRow {
                                     key: RowKey::Member(member.pid),
                                     title: member_text.title,
@@ -503,7 +509,8 @@ impl App {
                 }
                 Page::Programs => {
                     for program in crate::data::model::build_programs(&snapshot.groups) {
-                        let text = explain::render_program(&program, show_gpu);
+                        let text =
+                            explain::render_program(&program, show_gpu, meta_for(&program.key));
                         rows.push(DisplayRow {
                             key: RowKey::Program(program.key.clone()),
                             title: text.title,
@@ -956,6 +963,12 @@ impl App {
                 (footer_y - self.px(6) - list_y).max(0),
                 true,
             );
+            let mut list_rect = RECT::default();
+            if GetClientRect(self.list, &mut list_rect).is_ok() {
+                let desc =
+                    (list_rect.right - self.px(250) - self.px(88) - self.px(24)).max(self.px(220));
+                listview::set_column_width(self.list, 2, desc);
+            }
             let _ = MoveWindow(
                 self.footer,
                 margin,

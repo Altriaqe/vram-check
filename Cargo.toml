@@ -1,6 +1,6 @@
 [package]
 name = "vram-check"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "显存检查：谁占着显存、它是干什么的、关掉能省多少"
@@ -11,6 +11,7 @@ publish = false
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Storage_FileSystem",
     "Win32_System_Performance",
     "Win32_System_ProcessStatus",
     "Win32_Graphics_Dxgi",

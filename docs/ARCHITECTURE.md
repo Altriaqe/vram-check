@@ -171,6 +171,7 @@ pub struct Snapshot {
     pub total_local: u64,
     pub groups: Vec<AppGroup>,
     pub unattributed: Unattributed,
+    pub file_meta: HashMap<String, FileMeta>, // 未知程序的版本信息兜底
 }
 
 pub enum Unattributed {
@@ -297,6 +298,7 @@ vram-check/
 │   └── assets/              界面截图
 ├── scripts/
 │   ├── gate.ps1             体积 / 冷启动 / 依赖守门
+│   ├── release.ps1          发布包（构建 → 复制 → zip）
 │   └── make_icon.py         图标生成（Pillow）
 └── src/
     ├── main.rs              入口、单实例互斥、DPI 感知
@@ -308,9 +310,10 @@ vram-check/
     ├── data/
     │   ├── windows.rs       可见窗口 → pid（只读）
     │   ├── sampler.rs       采样线程、进程表缓存、GPU% 缓存
+    │   ├── filemeta.rs      exe 版本资源 → FileDescription/厂商
     │   └── model.rs         数据结构 + 进程树聚合
     ├── explain/
-    │   ├── rules.tsv        256 条规则（数据）
+    │   ├── rules.tsv        277 条规则（数据）
     │   ├── rules.rs         TSV 解析与匹配
     │   ├── classify.rs      风险分级
     │   └── render.rs        文案拼装（铁律在这里落地）

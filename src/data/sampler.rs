@@ -21,7 +21,9 @@ use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 use crate::vendor::dxgi::AdapterInfo;
 use crate::vendor::pdh::{parse_instance, CounterSet};
 
-use super::model::{build_groups, unattributed, Mode, ProcSample, Snapshot, Unattributed};
+use super::model::{
+    build_groups, unattributed, FileMeta, Mode, ProcSample, Snapshot, Unattributed,
+};
 use super::SampleError;
 
 /// 采样线程通知 UI："有新快照"。
@@ -50,6 +52,8 @@ pub struct Sampler {
     /// 进程名/父进程缓存：Toolhelp 枚举 336 个进程要 6–12 ms，没必要每秒做。
     procs: HashMap<u32, ProcessInfo>,
     procs_at: Instant,
+    /// 按程序名缓存的 exe 版本信息；查询一次就够。
+    meta_cache: HashMap<String, Option<FileMeta>>,
 }
 
 impl Sampler {
@@ -66,6 +70,7 @@ impl Sampler {
             tick: 0,
             procs: HashMap::new(),
             procs_at: Instant::now(),
+            meta_cache: HashMap::new(),
         })
     }
 
@@ -144,6 +149,12 @@ impl Sampler {
         self.engine_cache.retain(|pid, _| alive.contains(pid));
         samples.sort_unstable_by_key(|s| std::cmp::Reverse(s.local_bytes));
 
+        // 第一轮已经要刷进程表，别再叠加版本资源查询；下一轮再补。
+        let file_meta = if self.tick == 1 {
+            HashMap::new()
+        } else {
+            collect_meta(&samples, &mut self.meta_cache)
+        };
         let total_local: u64 = samples.iter().map(|s| s.local_bytes).sum();
         let groups = build_groups(&samples);
         let adapter_used = adapter_used_bytes(&adapter_rows, want_luid);
@@ -160,6 +171,7 @@ impl Sampler {
             total_local,
             groups,
             unattributed,
+            file_meta,
         })
     }
 
@@ -228,6 +240,7 @@ pub fn choose_primary(adapters: &[AdapterInfo]) -> Result<AdapterInfo, SampleErr
 pub struct MemorySampler {
     procs: HashMap<u32, ProcessInfo>,
     procs_at: Instant,
+    meta_cache: HashMap<String, Option<FileMeta>>,
 }
 
 impl MemorySampler {
@@ -235,6 +248,7 @@ impl MemorySampler {
         Self {
             procs: HashMap::new(),
             procs_at: Instant::now(),
+            meta_cache: HashMap::new(),
         }
     }
 
@@ -261,6 +275,7 @@ impl MemorySampler {
             samples.push(sample);
         }
         samples.sort_unstable_by_key(|sample| std::cmp::Reverse(sample.local_bytes));
+        let file_meta = collect_meta(&samples, &mut self.meta_cache);
         let total_local = samples.iter().map(|sample| sample.local_bytes).sum();
         let groups = build_groups(&samples);
         Ok(Snapshot {
@@ -271,6 +286,7 @@ impl MemorySampler {
             total_local,
             groups,
             unattributed: Unattributed::Unavailable,
+            file_meta,
         })
     }
 }
@@ -307,6 +323,36 @@ fn working_set(pid: u32) -> Option<u64> {
         result.ok()?;
         Some(counters.WorkingSetSize as u64)
     }
+}
+
+/// 每轮最多查 2 个新程序名，避免第一次采样被版本资源读取拖慢。
+const META_QUERIES_PER_TICK: usize = 2;
+
+fn collect_meta(
+    samples: &[ProcSample],
+    cache: &mut HashMap<String, Option<FileMeta>>,
+) -> HashMap<String, FileMeta> {
+    let mut out = HashMap::new();
+    let mut queried = 0;
+    for sample in samples {
+        let key = sample.name.to_ascii_lowercase();
+        if let Some(cached) = cache.get(&key) {
+            if let Some(meta) = cached {
+                out.insert(key, meta.clone());
+            }
+            continue;
+        }
+        if queried >= META_QUERIES_PER_TICK {
+            continue;
+        }
+        queried += 1;
+        let meta = super::filemeta::query(sample.pid);
+        cache.insert(key.clone(), meta.clone());
+        if let Some(meta) = meta {
+            out.insert(key, meta);
+        }
+    }
+    out
 }
 
 /// 采样线程句柄。UI 线程持有；Drop 时先发停止信号，再最多等 2 秒。

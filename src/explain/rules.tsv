@@ -289,3 +289,32 @@ crossdeviceresume.exe	caution	跨设备继续，关掉会影响接力
 shellhost.exe	caution	Windows 外壳宿主，关掉可能闪一下
 systemsettings.exe	caution	设置窗口，关掉会丢未保存设置
 microsoft.photos.exe	caution	照片应用，关掉会丢未保存编辑
+
+# ── AI 工具与开发辅助 ──────────────────────────────────────────────
+deepseek harness.exe	caution	DeepSeek 桌面客户端；关掉会退出当前会话，正在跑的任务会中断
+cc-switch.exe	caution	Claude Code / Codex 配置切换工具；关掉不影响已保存的配置
+codex.exe	caution	OpenAI Codex 命令行工具；关掉会中断正在执行的代码任务
+kilo.exe	caution	Kilo Code 编辑器扩展宿主；关掉会结束当前会话
+
+# ── WPS / Office ────────────────────────────────────────────────
+wps.exe	caution	WPS Office；关掉会丢未保存的文档
+et.exe	caution	WPS 表格；关掉会丢未保存的表格
+wpp.exe	caution	WPS 演示；关掉会丢未保存的演示文稿
+wpscloudsvr.exe	caution	WPS 云文档服务；关掉会影响云同步和登录
+olk.exe	caution	新版 Outlook；关掉会退出邮箱
+officeclicktorun.exe	caution	Office 更新服务；关掉只是暂停更新
+
+# ── Windows 组件补充 ─────────────────────────────────────────────
+tabtip.exe	safe	Windows 触摸键盘/手写面板；关掉需要时会自动重启
+crossdeviceservice.exe	caution	Windows 跨设备服务；关掉会影响手机连接和跨设备继续
+wmiprvse.exe	caution	WMI 查询服务；关掉系统信息查询会失败
+microsoftstartfeedprovider.exe	caution	Windows 小组件新闻源；关掉小组件会空白
+gamingservices.exe	caution	Xbox 游戏服务；关掉游戏栏和录制可能失效
+appactions.exe	caution	Windows 应用建议服务；关掉会影响系统建议
+
+# ── 代理 / 组网 / 内嵌浏览器 ───────────────────────────────────────
+tailscaled.exe	caution	Tailscale 组网服务；关掉会断开远程连接
+clash-verge.exe	caution	Clash Verge 代理客户端；关掉会断网
+verge-mihomo.exe	caution	Clash Verge 的代理内核；关掉代理会断开
+promecefpluginhost.exe	caution	应用内嵌浏览器（CEF）宿主；关掉会带走宿主应用的部分界面
+mspcmanagerservice.exe	caution	微软电脑管家服务；关掉会少清理和防护功能

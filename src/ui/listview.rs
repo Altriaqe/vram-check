@@ -19,6 +19,7 @@ const LVM_GETITEMSTATE: u32 = 0x102C;
 const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
 const LVM_INSERTCOLUMNW: u32 = 0x1061; // LVM_FIRST + 97
 const LVM_SETCOLUMNW: u32 = 4192;
+const LVM_SETCOLUMNWIDTH: u32 = 0x101E;
 const LVM_INSERTITEMW: u32 = 0x104D;
 const LVM_SETITEMTEXTW: u32 = 0x1074;
 const WM_SETFONT: u32 = 0x0030;
@@ -71,6 +72,18 @@ pub fn apply_style(list: HWND) {
 pub fn set_font(list: HWND, font: windows::Win32::Graphics::Gdi::HFONT) {
     unsafe {
         SendMessageW(list, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(1));
+    }
+}
+
+/// 改列宽：描述列跟随窗口宽度，别让长厂商名白截断。
+pub fn set_column_width(list: HWND, index: usize, width: i32) {
+    unsafe {
+        SendMessageW(
+            list,
+            LVM_SETCOLUMNWIDTH,
+            WPARAM(index),
+            LPARAM(width as isize),
+        );
     }
 }
 
