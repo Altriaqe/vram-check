@@ -74,9 +74,17 @@ pub enum Unattributed {
     Unavailable,
 }
 
+/// 采样口径：正常显存模式，或读不到计数器时的内存降级模式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Gpu,
+    Memory,
+}
+
 /// 一次采样。
 #[derive(Debug)]
 pub struct Snapshot {
+    pub mode: Mode,
     pub adapter_name: String,
     pub capacity_bytes: u64,
     /// 整卡已用。读不到时是 `None`——不是 0。

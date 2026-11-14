@@ -4,7 +4,7 @@
 
 一个 Windows 上的单文件小工具：打开就知道谁在吃显存，每一行都用人话解释，可以安全地关掉。
 
-![显存哨兵 M3 界面](docs/assets/m3-live.png)
+![显存哨兵界面](docs/assets/m4-ui.png)
 
 ---
 
@@ -17,7 +17,8 @@
 | M1 数据层 | ✅ **完成**（三列表跑通，见 [docs/M1-MEASUREMENTS.md](docs/M1-MEASUREMENTS.md)） |
 | M2 表达层 | ✅ **完成**：256 条规则、风险三级 + 图标/颜色/文字、可展开分组、未归属固定行、口径说明 |
 | M3 行动层 | ✅ **完成**：两个页签（实时 / 按程序）、右键结束任务、优雅关闭 → 3 秒 → 强制确认、关闭后实测整卡变化 |
-| M4 打磨 | 🔜 **下一步**：降级、图标、视觉样式、文档与合规 |
+| M4 打磨 | ✅ **完成**：无计数器降级为「内存」视图、comctl32 v6 视觉样式、体积/启动守门脚本 |
+| 发布 | ⬜ 待定：代码签名、应用图标、许可证选择 |
 
 **数据层的可行性已经没有悬念**：每进程显存可读、非提权、口径已验证。
 
@@ -65,6 +66,20 @@ Rust + `windows` crate + Win32 原生控件（GDI / ListView）。数据层参�
 cargo build --release
 cargo run --release
 ```
+
+发版前守门（体积 + 冷启动 + 依赖）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate.ps1
+```
+
+## 杀软误报
+
+exe 未签名，部分杀软会对 Rust 生成的二进制报启发式误报（本项目实测卡巴斯基对 **debug** 产物报过一次 `VHO:Trojan.Win32.Convagent.gen`）。这不是下载来的东西，也不联网、不写注册表、不常驻。
+
+- 开发时把仓库目录加入杀软排除项，或只用 release 产物；
+- 分发前做代码签名（PRD 风险 R1）；
+- 看到"清除并重启"的提示不要直接点，先把文件哈希和来源核对清楚。
 
 体积守门：`cargo build --release` 后产物必须 ≤ 2 MB。
 

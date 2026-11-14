@@ -11,16 +11,17 @@ use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, WAIT_OBJEC
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
+use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::Threading::{
     CreateEventW, GetProcessTimes, OpenProcess, SetEvent, WaitForMultipleObjects,
-    WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
+    WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
 };
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
 use crate::vendor::dxgi::AdapterInfo;
 use crate::vendor::pdh::{parse_instance, CounterSet};
 
-use super::model::{build_groups, unattributed, ProcSample, Snapshot, Unattributed};
+use super::model::{build_groups, unattributed, Mode, ProcSample, Snapshot, Unattributed};
 use super::SampleError;
 
 /// 采样线程通知 UI："有新快照"。
@@ -152,6 +153,7 @@ impl Sampler {
         };
 
         Ok(Snapshot {
+            mode: Mode::Gpu,
             adapter_name: self.adapter.name.clone(),
             capacity_bytes: self.adapter.dedicated_bytes,
             adapter_used,
@@ -222,6 +224,91 @@ pub fn choose_primary(adapters: &[AdapterInfo]) -> Result<AdapterInfo, SampleErr
         .ok_or(SampleError::NoAdapter)
 }
 
+/// 读不到 GPU 计数器时的降级采样：按工作集（内存）排。
+pub struct MemorySampler {
+    procs: HashMap<u32, ProcessInfo>,
+    procs_at: Instant,
+}
+
+impl MemorySampler {
+    pub fn new() -> Self {
+        Self {
+            procs: HashMap::new(),
+            procs_at: Instant::now(),
+        }
+    }
+
+    pub fn sample(&mut self) -> Result<Snapshot, SampleError> {
+        if self.procs.is_empty() || self.procs_at.elapsed() >= Duration::from_secs(5) {
+            self.procs = process_table()?;
+            self.procs_at = Instant::now();
+        }
+        let window_pids = super::windows::visible_window_pids();
+        let mut samples = Vec::new();
+        for &pid in self.procs.keys() {
+            if pid == 0 || pid == 4 {
+                continue;
+            }
+            let Some(bytes) = working_set(pid) else {
+                continue;
+            };
+            // 太小的进程不占版面；内存模式只是降级视图。
+            if bytes < 8 * 1024 * 1024 {
+                continue;
+            }
+            let mut sample = base_sample(pid, &self.procs, &window_pids);
+            sample.local_bytes = bytes;
+            samples.push(sample);
+        }
+        samples.sort_unstable_by_key(|sample| std::cmp::Reverse(sample.local_bytes));
+        let total_local = samples.iter().map(|sample| sample.local_bytes).sum();
+        let groups = build_groups(&samples);
+        Ok(Snapshot {
+            mode: Mode::Memory,
+            adapter_name: String::new(),
+            capacity_bytes: 0,
+            adapter_used: None,
+            total_local,
+            groups,
+            unattributed: Unattributed::Unavailable,
+        })
+    }
+}
+
+enum Worker {
+    Gpu(Sampler),
+    Memory(MemorySampler),
+}
+
+impl Worker {
+    fn sample(&mut self) -> Result<Snapshot, SampleError> {
+        match self {
+            Worker::Gpu(sampler) => sampler.sample(),
+            Worker::Memory(sampler) => sampler.sample(),
+        }
+    }
+}
+
+fn working_set(pid: u32) -> Option<u64> {
+    unsafe {
+        let handle = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ,
+            false,
+            pid,
+        )
+        .ok()?;
+        let mut counters = PROCESS_MEMORY_COUNTERS::default();
+        let result = GetProcessMemoryInfo(
+            handle,
+            &mut counters,
+            std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+        );
+        let _ = CloseHandle(handle);
+        result.ok()?;
+        Some(counters.WorkingSetSize as u64)
+    }
+}
+
 /// 采样线程句柄。UI 线程持有；Drop 时先发停止信号，再最多等 2 秒。
 pub struct SamplerThread {
     wake: HANDLE,
@@ -283,26 +370,22 @@ fn sampler_loop(
     tx: Sender<Snapshot>,
 ) {
     let adapters = crate::vendor::dxgi::enumerate().unwrap_or_default();
-    let adapter = match choose_primary(&adapters) {
-        Ok(adapter) => adapter,
-        Err(err) => {
-            post(hwnd.0, WM_SAMPLE_FAILED, err.code(), 0);
-            unsafe {
-                let _ = SetEvent(done.0);
-            }
-            return;
-        }
-    };
+    let adapter = choose_primary(&adapters).ok();
 
-    let mut sampler = match Sampler::new(adapter) {
-        Ok(sampler) => sampler,
-        Err(err) => {
-            post(hwnd.0, WM_SAMPLE_FAILED, err.code(), 0);
-            unsafe {
-                let _ = SetEvent(done.0);
+    let mut worker = match adapter {
+        Some(adapter) => match Sampler::new(adapter) {
+            Ok(sampler) => Worker::Gpu(sampler),
+            // 没有显卡计数器（Win7 / 驱动不提供）→ 降级为内存视图。
+            Err(SampleError::Open(_)) => Worker::Memory(MemorySampler::new()),
+            Err(err) => {
+                post(hwnd.0, WM_SAMPLE_FAILED, err.code(), 0);
+                unsafe {
+                    let _ = SetEvent(done.0);
+                }
+                return;
             }
-            return;
-        }
+        },
+        None => Worker::Memory(MemorySampler::new()),
     };
 
     loop {
@@ -311,7 +394,7 @@ fn sampler_loop(
             break;
         }
 
-        match sampler.sample() {
+        match worker.sample() {
             Ok(snapshot) => {
                 if tx.send(snapshot).is_err() {
                     break;

@@ -162,6 +162,7 @@ pub struct AppGroup {
 }
 
 pub struct Snapshot {
+    pub mode: Mode,              // Gpu 正常 / Memory 降级
     pub adapter_name: String,
     pub capacity_bytes: u64,
     pub adapter_used: Option<u64>, // 读不到时 None，不是 0
@@ -276,6 +277,8 @@ unattributed = adapter_used - Σ(local_bytes)
 ```
 vram-sentinel/
 ├── Cargo.toml
+├── app.manifest              comctl32 v6 + PerMonitorV2 DPI
+├── build.rs                  把 manifest 交给 MSVC link.exe
 ├── README.md
 ├── SYNC.md                  交接班：测试纪律、下载纪律、环境台账
 ├── THIRD-PARTY-NOTICES.md
@@ -287,6 +290,8 @@ vram-sentinel/
 │   ├── M0-MEASUREMENTS.md
 │   ├── M1-MEASUREMENTS.md
 │   └── assets/              界面截图
+├── scripts/
+│   └── gate.ps1             体积 / 冷启动 / 依赖守门
 └── src/
     ├── main.rs              入口、单实例互斥、DPI 感知
     ├── app.rs               生命周期、消息循环、行模型、自定义绘制
@@ -375,7 +380,8 @@ strip = "symbols"
 
 | 场景 | 错误处理 | 界面 |
 |---|---|---|
-| 计数器组不存在 | `ProbeResult::NoCounters` | 切"内存"列，顶部一句话说明 |
+| 计数器组不存在 | 切 `Mode::Memory`（Toolhelp + 工作集），**不是**放弃显示 | 列标题改「内存」，顶部一句"读不到显存计数器，已切换" |
+| 没有显卡 / DXGI 失败 | 同样切 `Mode::Memory` | 同上 |
 | 单个 counter 读取失败 | 跳过该行，不影响其他 | 该行显存列 `—` |
 | 进程已退出 | 从快照移除 | 不显示 |
 | 无权限 | 记为 `Unknown` | 名字可见，详情 `—` |

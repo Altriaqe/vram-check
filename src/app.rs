@@ -26,7 +26,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use crate::action;
-use crate::data::model::{Snapshot, Target, Unattributed};
+use crate::data::model::{Mode, Snapshot, Target, Unattributed};
 use crate::data::sampler::{self, SamplerThread};
 use crate::explain::{self, Risk};
 use crate::format;
@@ -89,6 +89,7 @@ pub struct App {
     page: Page,
     status: Option<(String, Instant)>,
     pending: Option<PendingClose>,
+    column_is_memory: bool,
     active: bool,
     minimized: bool,
     timer_on: bool,
@@ -116,6 +117,7 @@ impl App {
             page: Page::Live,
             status: None,
             pending: None,
+            column_is_memory: false,
             active: true,
             minimized: false,
             timer_on: false,
@@ -403,17 +405,30 @@ impl App {
     }
 
     fn apply_snapshot(&mut self, snapshot: Snapshot) {
-        let used = snapshot
-            .adapter_used
-            .map(format::bytes)
-            .unwrap_or_else(|| "—".to_string());
-        let header = format!(
-            "{} · 已用 {} / {}",
-            snapshot.adapter_name,
-            used,
-            format::bytes(snapshot.capacity_bytes)
-        );
+        let memory_mode = snapshot.mode == Mode::Memory;
+        let header = if memory_mode {
+            format!(
+                "内存模式 · 进程合计 {}（读不到显存计数器，已切换「内存」列）",
+                format::bytes_friendly(snapshot.total_local)
+            )
+        } else {
+            let used = snapshot
+                .adapter_used
+                .map(format::bytes)
+                .unwrap_or_else(|| "—".to_string());
+            format!(
+                "{} · 已用 {} / {}",
+                snapshot.adapter_name,
+                used,
+                format::bytes(snapshot.capacity_bytes)
+            )
+        };
         set_text(self.header, &header);
+
+        if !self.list.0.is_null() && memory_mode != self.column_is_memory {
+            listview::set_column_text(self.list, 1, if memory_mode { "内存" } else { "占用" });
+            self.column_is_memory = memory_mode;
+        }
 
         // 恒等式自检：未归属 + Σ本地 = 整卡已用；对不上说明聚合算法有 bug。
         debug_assert!(match snapshot.unattributed {
@@ -439,10 +454,11 @@ impl App {
                 return;
             };
             let mut rows = Vec::new();
+            let show_gpu = snapshot.mode == Mode::Gpu;
             match self.page {
                 Page::Live => {
                     for group in &snapshot.groups {
-                        let text = explain::render_group(group);
+                        let text = explain::render_group(group, show_gpu);
                         let expanded = self.expanded.contains(&group.root_pid);
                         let arrow = if group.members.len() > 1 {
                             if expanded {
@@ -464,7 +480,7 @@ impl App {
 
                         if expanded {
                             for member in &group.members {
-                                let member_text = explain::render_member(member);
+                                let member_text = explain::render_member(member, show_gpu);
                                 rows.push(DisplayRow {
                                     key: RowKey::Member(member.pid),
                                     title: member_text.title,
@@ -479,7 +495,7 @@ impl App {
                 }
                 Page::Programs => {
                     for program in crate::data::model::build_programs(&snapshot.groups) {
-                        let text = explain::render_program(&program);
+                        let text = explain::render_program(&program, show_gpu);
                         rows.push(DisplayRow {
                             key: RowKey::Program(program.key.clone()),
                             title: text.title,
@@ -799,13 +815,20 @@ impl App {
         let Some(snapshot) = &self.snapshot else {
             return;
         };
-        let base = match snapshot.unattributed {
-            Unattributed::Bytes(bytes) => format!(
-                "未归属 {}（驱动与共享资源，无法关闭）",
-                format::bytes_friendly(bytes)
-            ),
-            Unattributed::Overcounted(_) => "未归属 —（口径异常：进程合计超过整卡）".to_string(),
-            Unattributed::Unavailable => "未归属 —（整卡读数不可用）".to_string(),
+        let memory_mode = snapshot.mode == Mode::Memory;
+        let base = if memory_mode {
+            "这里显示的是内存占用，不是显存（读不到显存计数器）".to_string()
+        } else {
+            match snapshot.unattributed {
+                Unattributed::Bytes(bytes) => format!(
+                    "未归属 {}（驱动与共享资源，无法关闭）",
+                    format::bytes_friendly(bytes)
+                ),
+                Unattributed::Overcounted(_) => {
+                    "未归属 —（口径异常：进程合计超过整卡）".to_string()
+                }
+                Unattributed::Unavailable => "未归属 —（整卡读数不可用）".to_string(),
+            }
         };
         let extra = match self.page {
             Page::Live => format!(

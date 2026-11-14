@@ -18,6 +18,7 @@ const LVM_SETITEMSTATE: u32 = 0x102B;
 const LVM_GETITEMSTATE: u32 = 0x102C;
 const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
 const LVM_INSERTCOLUMNW: u32 = 0x1061; // LVM_FIRST + 97
+const LVM_SETCOLUMNW: u32 = 4192;
 const LVM_INSERTITEMW: u32 = 0x104D;
 const LVM_SETITEMTEXTW: u32 = 0x1074;
 const WM_SETFONT: u32 = 0x0030;
@@ -70,6 +71,25 @@ pub fn apply_style(list: HWND) {
 pub fn set_font(list: HWND, font: windows::Win32::Graphics::Gdi::HFONT) {
     unsafe {
         SendMessageW(list, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(1));
+    }
+}
+
+/// 改列标题：显存模式是"占用"，降级模式是"内存"。
+pub fn set_column_text(list: HWND, index: usize, text: &str) {
+    let mut buffer = crate::vendor::wide(text);
+    let mut column = LVCOLUMNW {
+        mask: LVCF_TEXT,
+        pszText: PWSTR(buffer.as_mut_ptr()),
+        cchTextMax: buffer.len() as i32 - 1,
+        ..Default::default()
+    };
+    unsafe {
+        SendMessageW(
+            list,
+            LVM_SETCOLUMNW,
+            WPARAM(index),
+            LPARAM(&mut column as *mut _ as isize),
+        );
     }
 }
 
