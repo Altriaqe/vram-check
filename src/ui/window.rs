@@ -5,7 +5,7 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{GetSysColorBrush, SetBkMode, COLOR_WINDOW, HDC, TRANSPARENT};
 use windows::Win32::UI::Controls::{NMHDR, NM_CUSTOMDRAW, NM_DBLCLK, NM_RCLICK, TCN_SELCHANGE};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, GetWindowLongPtrW, LoadCursorW, RegisterClassW, SetWindowLongPtrW,
+    DefWindowProcW, GetWindowLongPtrW, LoadCursorW, LoadIconW, RegisterClassW, SetWindowLongPtrW,
     CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, GWLP_USERDATA, IDC_ARROW, WNDCLASSW,
 };
 
@@ -35,10 +35,13 @@ pub fn class_wide() -> Vec<u16> {
 pub fn register(hinstance: HINSTANCE) -> Result<(), String> {
     let class = class_wide();
     let cursor = unsafe { LoadCursorW(None, IDC_ARROW) }.map_err(|e| e.message().to_string())?;
+    // 资源 ID 1 是 app.rc 里的图标；没有资源时退回系统默认。
+    let icon = unsafe { LoadIconW(hinstance, PCWSTR(1 as *const u16)) }.unwrap_or_default();
     let window_class = WNDCLASSW {
         style: CS_HREDRAW | CS_VREDRAW,
         lpfnWndProc: Some(wndproc),
         hInstance: hinstance,
+        hIcon: icon,
         hCursor: cursor,
         hbrBackground: unsafe { GetSysColorBrush(COLOR_WINDOW) },
         lpszClassName: PCWSTR(class.as_ptr()),

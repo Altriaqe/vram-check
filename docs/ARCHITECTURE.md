@@ -278,7 +278,10 @@ unattributed = adapter_used - Σ(local_bytes)
 vram-sentinel/
 ├── Cargo.toml
 ├── app.manifest              comctl32 v6 + PerMonitorV2 DPI
-├── build.rs                  把 manifest 交给 MSVC link.exe
+├── app.rc                    图标 + VERSIONINFO
+├── app.ico                   由 scripts/make_icon.py 生成
+├── build.rs                  manifest / .res 交给 MSVC 链接器
+├── LICENSE                   MIT
 ├── README.md
 ├── SYNC.md                  交接班：测试纪律、下载纪律、环境台账
 ├── THIRD-PARTY-NOTICES.md
@@ -291,7 +294,8 @@ vram-sentinel/
 │   ├── M1-MEASUREMENTS.md
 │   └── assets/              界面截图
 ├── scripts/
-│   └── gate.ps1             体积 / 冷启动 / 依赖守门
+│   ├── gate.ps1             体积 / 冷启动 / 依赖守门
+│   └── make_icon.py         图标生成（Pillow）
 └── src/
     ├── main.rs              入口、单实例互斥、DPI 感知
     ├── app.rs               生命周期、消息循环、行模型、自定义绘制

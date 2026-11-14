@@ -49,12 +49,12 @@ try {
 
     $null = Measure-StartOnce
     $runs = @()
-    1..3 | ForEach-Object {
+    1..5 | ForEach-Object {
         $runs += Measure-StartOnce
         Start-Sleep -Milliseconds 250
     }
     $sorted = $runs | Sort-Object
-    $median = [math]::Round($sorted[1], 1)
+    $median = [math]::Round($sorted[2], 1)
     $runText = ($runs | ForEach-Object { [math]::Round($_, 1) }) -join ', '
     "冷启动: $runText ms，中位 $median ms（预算 100 ms）"
     if ($median -gt 100) { throw "冷启动超标：中位 $median ms > 100 ms" }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-  <assemblyIdentity type="win32" name="VramSentinel" version="0.1.0.0" processorArchitecture="*" />
+  <assemblyIdentity type="win32" name="VramSentinel" version="1.0.0.0" processorArchitecture="*" />
   <description>显存哨兵</description>
 
   <!-- comctl32 v6：现代 ListView / 标签页 / 按钮 -->

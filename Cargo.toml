@@ -1,9 +1,10 @@
 [package]
 name = "vram-sentinel"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.75"
 description = "显存哨兵：谁占着显存、它是干什么的、关掉能省多少"
+license = "MIT"
 publish = false
 
 [dependencies]

@@ -73,6 +73,15 @@ cargo run --release
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate.ps1
 ```
 
+## 发布产物
+
+| 文件 | 说明 |
+|---|---|
+| `dist\vram-sentinel.exe` | 294 KB，带图标与版本信息（1.0.0），双击即用 |
+| `dist\vram-sentinel-1.0.0-win64.zip` | exe + LICENSE + README + 第三方声明 |
+
+exe 的 SHA-256（本次构建）：`323359CCDC644D52994FD8EE64AF36A1E4B15E2D00F3B6C8756430C908D57382`
+
 ## 杀软误报
 
 exe 未签名，部分杀软会对 Rust 生成的二进制报启发式误报（本项目实测卡巴斯基对 **debug** 产物报过一次 `VHO:Trojan.Win32.Convagent.gen`）。这不是下载来的东西，也不联网、不写注册表、不常驻。
@@ -87,5 +96,6 @@ exe 未签名，部分杀软会对 Rust 生成的二进制报启发式误报（�
 
 ## 许可证
 
-上游 hypomnesis 为 MIT OR Apache-2.0，署名见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
-本项目自身的许可证待定（见 PRD 开放问题）。
+本项目使用 **MIT License**，全文见 [LICENSE](LICENSE)。
+
+上游 hypomnesis 为 MIT OR Apache-2.0，本项目未复制其源码，署名与说明见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
