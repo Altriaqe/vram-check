@@ -183,33 +183,25 @@ vram-check/
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | 工程规范：unsafe、错误处理、文案、提交 |
 | [docs/M1-MEASUREMENTS.md](docs/M1-MEASUREMENTS.md) | 体积、启动、采样、内存实测 |
 
-## 开发
+## 参与贡献
 
-```powershell
-cargo fmt --check
-cargo clippy --offline --all-targets -- -D warnings
-cargo test --offline
-```
+用着有问题就直接提 [Issue](https://github.com/Altriaqe/vram-check/issues)，有改动就开 [Pull Request](https://github.com/Altriaqe/vram-check/pulls)，不用先问。
 
-真实显卡的 live 采样测试默认忽略，需要时手动跑：
+提交信息用 [Conventional Commits](https://www.conventionalcommits.org/)：
 
-```powershell
-cargo test --offline -- --ignored --nocapture
-```
+| 前缀 | 用途 |
+|---|---|
+| `feat:` | 新功能 |
+| `fix:` | 修 bug |
+| `docs:` | 文档 |
+| `refactor:` | 重构，不改行为 |
+| `perf:` | 性能 |
+| `test:` | 测试 |
+| `chore:` | 构建、依赖、杂项 |
 
-发布前守门（体积 ≤ 2 MB、冷启动中位 ≤ 100 ms、依赖检查）：
+示例：`docs: 精简 README 开发说明`
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate.ps1
-```
-
-打发布包（守门 → 复制 exe/文档 → 压缩到 `release\`）：
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1
-```
-
-测试策略：只给"算错会静默骗人"的纯逻辑写单测；不写冒烟/灰度/E2E，真实数据靠手动对照 `nvidia-smi` 和任务管理器验证。
+一个 PR 一件事，带上复现步骤或截图。更细的工程规范见 [docs/CONVENTIONS.md](docs/CONVENTIONS.md)。
 
 ## 许可证
 
