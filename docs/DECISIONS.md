@@ -170,7 +170,7 @@
 
 **背景**：PRD §12 的开放问题 1——自己的代码要不要开源、用什么许可证。
 
-**决策**：**MIT**。版权人写 `VRAM Sentinel contributors`，全文在仓库根 `LICENSE`。
+**决策**：**MIT**。版权人写 `VRAM Check contributors`，全文在仓库根 `LICENSE`。
 
 **理由**：
 1. 缓解杀软误报：开源 + 可审计的源码比"未签名的黑盒 exe"更容易申诉（PRD 风险 R1）；

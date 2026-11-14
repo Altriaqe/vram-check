@@ -16,7 +16,7 @@
 
 | 需求 | 结果 | 证据 |
 |---|---|---|
-| F-01 单文件 ≤ 2 MB | ✅ **216,576 B（212 KB）**，为预算的 10.4% | `target/release/vram-sentinel.exe` |
+| F-01 单文件 ≤ 2 MB | ✅ **216,576 B（212 KB）**，为预算的 10.4% | `target/release/vram-check.exe` |
 | F-02 冷启动 ≤ 100 ms | ⚠️ **98.3 / 100.2 ms（热），137.4 ms（首次冷启动）** | `WaitForInputIdle` 三次；首次含磁盘/杀软开销 |
 | F-03 内存 ≤ 30 MB | ✅ 常驻 **15.9 MB** | 首屏后 Working Set |
 | F-04 不常驻 | ✅ 关窗即退，无残留进程 | `CloseMainWindow` → `HasExited=True` |
@@ -91,7 +91,7 @@ $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
 cargo test --offline                        # 16 个单测
 cargo test --offline -- --ignored --nocapture  # live 采样，打印耗时与 Top 列表
 cargo build --release --offline
-(Get-Item .\target\release\vram-sentinel.exe).Length / 1KB
+(Get-Item .\target\release\vram-check.exe).Length / 1KB
 ```
 
 ---

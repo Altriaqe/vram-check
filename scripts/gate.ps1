@@ -24,7 +24,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'cargo build --release 失败。' }
     }
 
-    $exe = Join-Path $root 'target\release\vram-sentinel.exe'
+    $exe = Join-Path $root 'target\release\vram-check.exe'
     if (-not (Test-Path $exe)) { throw "产物不存在：$exe" }
 
     $size = (Get-Item $exe).Length

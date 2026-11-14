@@ -24,7 +24,7 @@ fn main() {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
         // 单实例：已经在跑就把旧窗口叫到前面，不重复开。
-        let mutex_name = wide("Local\\VramSentinelSingleInstance");
+        let mutex_name = wide("Local\\VramCheckSingleInstance");
         let _mutex = CreateMutexW(None, true, PCWSTR(mutex_name.as_ptr()));
         if GetLastError() == ERROR_ALREADY_EXISTS {
             let class = ui::window::class_wide();

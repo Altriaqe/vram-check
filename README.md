@@ -1,10 +1,10 @@
-# 显存哨兵 VRAM Sentinel
+# 显存检查 VRAM Check
 
 > 显存不够时的急救箱——谁占着、它是干什么的、关掉能省多少、会不会出事。
 
 一个 Windows 上的单文件小工具：打开就知道谁在吃显存，每一行都用人话解释，可以安全地关掉。
 
-![显存哨兵界面](docs/assets/m4-ui.png)
+![显存检查界面](docs/assets/m4-ui.png)
 
 ---
 
@@ -77,11 +77,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate.ps1
 
 | 文件 | 说明 |
 |---|---|
-| `release\vram-sentinel.exe` | 298 KB，带图标与版本信息（1.0.0），双击即用 |
-| `release\vram-sentinel-1.0.0-win64.zip` | exe + LICENSE + README + 第三方声明 |
+| `release\vram-check.exe` | 298 KB，带图标与版本信息（1.0.0），双击即用 |
+| `release\vram-check-1.0.0-win64.zip` | exe + LICENSE + README + 第三方声明 |
 | `release\SHA256SUMS.txt` | 两个文件的 SHA-256 |
 
-exe 的 SHA-256：`306A3D6192692C7108D42131AEBF099EA0E231B0E2B5985ABD80E3AD3C972466`
+exe 的 SHA-256：`6EF0B819071EC7D79E4A34F8FB465CFE17714C3924D111322015E1F764B3F0DD`
 
 重新打包（守门 + 复制文档 + 压缩 + 写哈希）：
 

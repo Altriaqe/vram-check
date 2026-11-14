@@ -267,7 +267,7 @@ unattributed = adapter_used - Σ(local_bytes)
 | 移什么 | 只移 `pdh.rs` 的实例名解析 / LUID 过滤 / 两段式枚举，`dxgi.rs` 的适配器枚举 |
 | 不移什么 | NVML / Metal / CLI / spill / JSON / nvidia-smi 子进程 |
 | FFI 部分 | **自己写**。`probe/src/main.rs` 已验证过 `windows` crate 的调用形状，比移植更可靠 |
-| 改动标注 | 每个改过的文件头加 `// Modified by VRAM Sentinel: <改了什么>` |
+| 改动标注 | 每个改过的文件头加 `// Modified by VRAM Check: <改了什么>` |
 | 版权 | 保留原作者 copyright + `SPDX-License-Identifier: MIT OR Apache-2.0` |
 | 同步 | `vendor/VENDOR.md` 记录上游 commit；每季度 diff 一次 |
 | 目标 | **最终不再 fork**——把 Local 口径补丁提回上游，之后可切回依赖 |
@@ -277,7 +277,7 @@ unattributed = adapter_used - Σ(local_bytes)
 ## 8. 目录结构
 
 ```
-vram-sentinel/
+vram-check/
 ├── Cargo.toml
 ├── app.manifest              comctl32 v6 + PerMonitorV2 DPI
 ├── app.rc                    图标 + VERSIONINFO

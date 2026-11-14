@@ -13,13 +13,13 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "CompanyName", "VRAM Sentinel contributors"
-            VALUE "FileDescription", "VRAM Sentinel"
+            VALUE "CompanyName", "VRAM Check contributors"
+            VALUE "FileDescription", "VRAM Check"
             VALUE "FileVersion", "1.0.0.0"
-            VALUE "InternalName", "vram-sentinel"
+            VALUE "InternalName", "vram-check"
             VALUE "LegalCopyright", "MIT License"
-            VALUE "OriginalFilename", "vram-sentinel.exe"
-            VALUE "ProductName", "VRAM Sentinel"
+            VALUE "OriginalFilename", "vram-check.exe"
+            VALUE "ProductName", "VRAM Check"
             VALUE "ProductVersion", "1.0.0.0"
         END
     END

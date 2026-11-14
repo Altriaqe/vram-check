@@ -165,7 +165,7 @@ macro_rules! dbg_log {
 
 ```powershell
 cargo build --release
-$size = (Get-Item .\target\release\vram-sentinel.exe).Length
+$size = (Get-Item .\target\release\vram-check.exe).Length
 "体积: {0:N0} KB" -f ($size / 1KB)
 if ($size -gt 2MB) { throw "体积超标，拒绝合并" }
 ```
@@ -173,7 +173,7 @@ if ($size -gt 2MB) { throw "体积超标，拒绝合并" }
 启动时间：
 
 ```powershell
-(Measure-Command { Start-Process .\target\release\vram-sentinel.exe -PassThru | Out-Null }).TotalMilliseconds
+(Measure-Command { Start-Process .\target\release\vram-check.exe -PassThru | Out-Null }).TotalMilliseconds
 ```
 
 | 指标     | 红线             |
@@ -235,7 +235,7 @@ M1–M3 阶段不做 CI，靠本地守门；M4 再加。
 ```rust
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) <上游作者>
-// Modified by VRAM Sentinel: Dedicated Usage -> Local Usage
+// Modified by VRAM Check: Dedicated Usage -> Local Usage
 ```
 
 ---

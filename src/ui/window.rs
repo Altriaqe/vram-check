@@ -13,7 +13,7 @@ use crate::app::{App, WM_APP_START};
 use crate::data::sampler::{WM_SAMPLE_FAILED, WM_SNAPSHOT_READY};
 use crate::vendor::wide;
 
-pub const CLASS: &str = "VramSentinelWnd";
+pub const CLASS: &str = "VramCheckWnd";
 
 // 消息常量用数值，避免把整个 WindowsAndMessaging 常量表拖进 use 列表。
 const WM_CREATE: u32 = 0x0001;

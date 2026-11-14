@@ -134,7 +134,7 @@ README 有一节 *Why no `hmn kill`?*：
 | 项 | 为什么没验 | 怎么验 |
 |---|---|---|
 | **体积 ≤2MB** | 本机没有 Rust 工具链 | 装 rustup + MSVC 后 `cargo build --release` |
-| **冷启动 ≤100ms** | 同上 | `Measure-Command { .\vram-sentinel.exe }` |
+| **冷启动 ≤100ms** | 同上 | `Measure-Command { .\vram-check.exe }` |
 | **杀进程后显存回收** | 需要构造占用场景 | 起一个占 2GB 的进程，杀掉，测 10 秒回收曲线 |
 
 `Get-Counter` 单次 1008–1209 ms 是 **PowerShell 的开销**（每次新建 PDH 查询 + 1 秒采样间隔），不是 PDH 的真实成本。Rust 版用常驻查询，预期 5–15ms——**这条必须实测，不能拿 PS 的数字下结论**。

@@ -127,7 +127,7 @@ impl App {
 
     pub fn on_create(&mut self, hwnd: HWND) {
         self.hwnd = hwnd;
-        let title = wide("显存哨兵");
+        let title = wide("显存检查");
         unsafe {
             let _ = SetWindowTextW(hwnd, PCWSTR(title.as_ptr()));
         }
@@ -853,7 +853,7 @@ impl App {
 
     fn show_help(&self) {
         let text = "为什么和任务管理器不一样？\n\n\
-显存哨兵统计的是「本地显存」：只算真正落在这块显卡上的部分，同一台机器上各进程相加不会超过整卡。\n\
+显存检查统计的是「本地显存」：只算真正落在这块显卡上的部分，同一台机器上各进程相加不会超过整卡。\n\
 任务管理器默认显示「专用显存」：它会把跨进程共享的画面重复算给多个进程，空闲时相加也可能超过整卡，所以不能直接相加。\n\n\
 本机空闲时，本地显存相加约占整卡的 94%，剩下的是驱动和共享资源，显示为「未归属」。\n\
 容量也有差别：这里显示的是驱动报告的可用显存，比包装上的 8GB 略少，差额被驱动预留。\n\n\
@@ -980,7 +980,7 @@ pub fn run() -> Result<(), String> {
     let state = Box::new(App::new());
     let state_ptr = Box::into_raw(state);
     let class = window::class_wide();
-    let title = wide("显存哨兵");
+    let title = wide("显存检查");
     let dpi = unsafe { GetDpiForSystem() };
     let width = 900 * dpi as i32 / 96;
     let height = 520 * dpi as i32 / 96;
@@ -1082,7 +1082,7 @@ fn set_text(hwnd: HWND, text: &str) {
 /// 启动失败时给用户一句话，而不是一串错误码。
 pub fn show_error(message: &str) {
     let text = wide(message);
-    let caption = wide("显存哨兵");
+    let caption = wide("显存检查");
     unsafe {
         MessageBoxW(
             HWND::default(),
