@@ -322,6 +322,7 @@ vram-check/
     │   └── close.rs         WM_CLOSE → 3 秒 → 强制确认；核对 (pid, start_time)
     └── ui/
         ├── window.rs        窗口过程、消息分派
+        ├── icons.rs         exe 图标 → ImageList
         └── listview.rs      ListView 封装、列、行、选中、滚动位置
 ```
 

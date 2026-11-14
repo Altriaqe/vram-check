@@ -5,7 +5,8 @@
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, WPARAM};
 use windows::Win32::UI::Controls::{
-    LIST_VIEW_ITEM_STATE_FLAGS, LVCF_TEXT, LVCF_WIDTH, LVCOLUMNW, LVIF_TEXT, LVITEMW,
+    HIMAGELIST, LIST_VIEW_ITEM_STATE_FLAGS, LVCF_TEXT, LVCF_WIDTH, LVCOLUMNW, LVIF_IMAGE,
+    LVIF_TEXT, LVITEMW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, SendMessageW, HMENU, WINDOW_EX_STYLE, WINDOW_STYLE,
@@ -17,12 +18,15 @@ const LVM_ENSUREVISIBLE: u32 = 0x1013;
 const LVM_SETITEMSTATE: u32 = 0x102B;
 const LVM_GETITEMSTATE: u32 = 0x102C;
 const LVM_SETEXTENDEDLISTVIEWSTYLE: u32 = 0x1036;
+const LVM_SETIMAGELIST: u32 = 0x1003;
 const LVM_INSERTCOLUMNW: u32 = 0x1061; // LVM_FIRST + 97
 const LVM_SETCOLUMNW: u32 = 4192;
 const LVM_SETCOLUMNWIDTH: u32 = 0x101E;
 const LVM_INSERTITEMW: u32 = 0x104D;
 const LVM_SETITEMTEXTW: u32 = 0x1074;
 const WM_SETFONT: u32 = 0x0030;
+
+const LVSIL_SMALL: usize = 1;
 
 const LVS_EX_FULLROWSELECT: usize = 0x0000_0020;
 const LVS_EX_DOUBLEBUFFER: usize = 0x0001_0000;
@@ -72,6 +76,18 @@ pub fn apply_style(list: HWND) {
 pub fn set_font(list: HWND, font: windows::Win32::Graphics::Gdi::HFONT) {
     unsafe {
         SendMessageW(list, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(1));
+    }
+}
+
+/// 给小图标列接上 ImageList。
+pub fn set_image_list(list: HWND, images: HIMAGELIST) {
+    unsafe {
+        SendMessageW(
+            list,
+            LVM_SETIMAGELIST,
+            WPARAM(LVSIL_SMALL),
+            LPARAM(images.0),
+        );
     }
 }
 
@@ -189,19 +205,19 @@ pub fn ensure_visible(list: HWND, index: i32) {
 }
 
 /// 整表替换。行数很少（一屏 Top 10+），不做增量。
-pub fn set_rows(list: HWND, rows: &[(String, String, String)]) {
+pub fn set_rows(list: HWND, rows: &[(i32, String, String, String)]) {
     unsafe {
         SendMessageW(list, LVM_DELETEALLITEMS, WPARAM(0), LPARAM(0));
     }
 
-    for (row_index, (first, second, third)) in rows.iter().enumerate() {
-        let mut first_text = crate::vendor::wide(first);
+    for (row_index, (image, first, second, third)) in rows.iter().enumerate() {
+        // 第 0 列只放图标；文字从第 1 列开始，否则名字会被 24px 的图标列裁掉。
+        let mask = LVIF_IMAGE;
         let mut item = LVITEMW {
-            mask: LVIF_TEXT,
+            mask,
             iItem: row_index as i32,
             iSubItem: 0,
-            pszText: PWSTR(first_text.as_mut_ptr()),
-            cchTextMax: first_text.len() as i32 - 1,
+            iImage: *image,
             ..Default::default()
         };
         let inserted = unsafe {
@@ -213,7 +229,7 @@ pub fn set_rows(list: HWND, rows: &[(String, String, String)]) {
             )
         };
 
-        for (sub_item, extra) in [(1i32, second), (2i32, third)] {
+        for (sub_item, extra) in [(1i32, first), (2i32, second), (3i32, third)] {
             let mut extra_text = crate::vendor::wide(extra);
             let mut cell = LVITEMW {
                 mask: LVIF_TEXT,

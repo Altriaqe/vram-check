@@ -1,6 +1,6 @@
 //! 生命周期、消息循环、UI 与采样线程的接线。
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
@@ -14,7 +14,7 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
     CDDS_ITEMPREPAINT, CDDS_PREPAINT, CDRF_DODEFAULT, CDRF_NEWFONT, CDRF_NOTIFYITEMDRAW,
-    LVHITTESTINFO, NMITEMACTIVATE, NMLVCUSTOMDRAW, TCIF_TEXT, TCITEMW,
+    HIMAGELIST, LVHITTESTINFO, NMITEMACTIVATE, NMLVCUSTOMDRAW, TCIF_TEXT, TCITEMW,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -30,7 +30,7 @@ use crate::data::model::{Mode, Snapshot, Target, Unattributed};
 use crate::data::sampler::{self, SamplerThread};
 use crate::explain::{self, Risk};
 use crate::format;
-use crate::ui::{listview, window};
+use crate::ui::{icons, listview, window};
 use crate::vendor::wide;
 
 const WM_SETFONT: u32 = 0x0030;
@@ -61,6 +61,9 @@ struct DisplayRow {
     desc: String,
     risk: Risk,
     targets: Vec<Target>,
+    icon: i32,
+    icon_name: String,
+    icon_pid: u32,
 }
 
 struct PendingClose {
@@ -91,6 +94,8 @@ pub struct App {
     status: Option<(String, Instant)>,
     pending: Option<PendingClose>,
     column_is_memory: bool,
+    icons: HIMAGELIST,
+    icon_cache: HashMap<String, i32>,
     active: bool,
     minimized: bool,
     timer_on: bool,
@@ -119,6 +124,8 @@ impl App {
             status: None,
             pending: None,
             column_is_memory: false,
+            icons: HIMAGELIST::default(),
+            icon_cache: HashMap::new(),
             active: true,
             minimized: false,
             timer_on: false,
@@ -249,13 +256,19 @@ impl App {
                 self.list = list;
                 listview::set_font(list, self.font);
                 listview::apply_style(list);
-                let widths = [self.px(250), self.px(88), self.px(470)];
+                let images = icons::create(self.px(16));
+                if images.0 != 0 {
+                    self.icons = images;
+                    listview::set_image_list(list, images);
+                }
+                let widths = [self.px(24), self.px(250), self.px(88), self.px(470)];
                 listview::set_columns(
                     list,
                     &[
-                        ("程序", widths[0]),
-                        ("占用", widths[1]),
-                        ("描述", widths[2]),
+                        ("", widths[0]),
+                        ("程序", widths[1]),
+                        ("占用", widths[2]),
+                        ("描述", widths[3]),
                     ],
                 );
             }
@@ -434,7 +447,7 @@ impl App {
         set_text(self.header, &header);
 
         if !self.list.0.is_null() && memory_mode != self.column_is_memory {
-            listview::set_column_text(self.list, 1, if memory_mode { "内存" } else { "占用" });
+            listview::set_column_text(self.list, 2, if memory_mode { "内存" } else { "占用" });
             self.column_is_memory = memory_mode;
         }
 
@@ -486,6 +499,9 @@ impl App {
                             desc: text.desc,
                             risk: text.risk,
                             targets: group.members.iter().map(|member| member.target()).collect(),
+                            icon: -1,
+                            icon_name: group.root_name.clone(),
+                            icon_pid: group.root_pid,
                         });
 
                         if expanded {
@@ -502,6 +518,9 @@ impl App {
                                     desc: member_text.desc,
                                     risk: member_text.risk,
                                     targets: vec![member.target()],
+                                    icon: -1,
+                                    icon_name: member.name.clone(),
+                                    icon_pid: member.pid,
                                 });
                             }
                         }
@@ -522,12 +541,25 @@ impl App {
                                 .iter()
                                 .map(|member| member.target())
                                 .collect(),
+                            icon: -1,
+                            icon_name: program.name.clone(),
+                            icon_pid: program.members.first().map_or(0, |member| member.pid),
                         });
                     }
                 }
             }
             rows
         };
+
+        let mut rows = rows;
+        let mut icon_budget = 8;
+        for row in &mut rows {
+            row.icon = self.resolve_icon(&row.icon_name, row.icon_pid, &mut icon_budget);
+            if row.icon >= 0 {
+                row.title = strip_glyph(&row.title, row.risk.glyph());
+            }
+        }
+        let rows = rows;
 
         let changed = self.rows.len() != rows.len()
             || self.rows.iter().zip(&rows).any(|(old, new)| {
@@ -536,16 +568,18 @@ impl App {
                     || old.bytes != new.bytes
                     || old.desc != new.desc
                     || old.risk != new.risk
+                    || old.icon != new.icon
             });
         self.rows = rows;
 
         if changed && !self.list.0.is_null() {
             let top = listview::top_index(self.list);
-            let tuples: Vec<(String, String, String)> = self
+            let tuples: Vec<(i32, String, String, String)> = self
                 .rows
                 .iter()
                 .map(|row| {
                     (
+                        row.icon,
                         row.title.clone(),
                         format::bytes(row.bytes),
                         row.desc.clone(),
@@ -557,6 +591,24 @@ impl App {
             self.restore_selection(&selected);
         }
         self.update_footer();
+    }
+
+    /// 按程序名缓存图标索引；每轮最多抽 8 个，避免首屏卡在 shell 查询上。
+    fn resolve_icon(&mut self, name: &str, pid: u32, budget: &mut usize) -> i32 {
+        if self.icons.0 == 0 {
+            return -1;
+        }
+        let key = name.to_ascii_lowercase();
+        if let Some(&index) = self.icon_cache.get(&key) {
+            return index;
+        }
+        if *budget == 0 {
+            return -1;
+        }
+        *budget -= 1;
+        let index = icons::add(self.icons, pid).unwrap_or(-1);
+        self.icon_cache.insert(key, index);
+        index
     }
 
     fn selected_keys(&self) -> Vec<RowKey> {
@@ -966,8 +1018,9 @@ impl App {
             let mut list_rect = RECT::default();
             if GetClientRect(self.list, &mut list_rect).is_ok() {
                 let desc =
-                    (list_rect.right - self.px(250) - self.px(88) - self.px(24)).max(self.px(220));
-                listview::set_column_width(self.list, 2, desc);
+                    (list_rect.right - self.px(24) - self.px(250) - self.px(88) - self.px(24))
+                        .max(self.px(220));
+                listview::set_column_width(self.list, 3, desc);
             }
             let _ = MoveWindow(
                 self.footer,
@@ -1048,6 +1101,15 @@ fn insert_tab(tab: HWND, text: &str, index: usize) {
             LPARAM(&mut item as *mut _ as isize),
         );
     }
+}
+
+fn strip_glyph(title: &str, glyph: &str) -> String {
+    let Some(pos) = title.find(glyph) else {
+        return title.to_string();
+    };
+    let after = &title[pos + glyph.len()..];
+    let after = after.strip_prefix(' ').unwrap_or(after);
+    format!("{}{}", &title[..pos], after)
 }
 
 fn create_font(height: i32, weight: i32) -> HFONT {

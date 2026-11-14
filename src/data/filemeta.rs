@@ -56,7 +56,7 @@ pub fn query(pid: u32) -> Option<FileMeta> {
     }
 }
 
-fn process_path(pid: u32) -> Option<String> {
+pub fn process_path(pid: u32) -> Option<String> {
     unsafe {
         let handle: HANDLE = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buffer = [0u16; 1024];
