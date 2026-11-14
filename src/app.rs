@@ -3,27 +3,30 @@
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
 
-use windows::core::PCWSTR;
-use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateFontIndirectW, SetTextColor, UpdateWindow, CLEARTYPE_QUALITY, DEFAULT_CHARSET, HFONT,
-    LOGFONTW,
+    CreateFontIndirectW, ScreenToClient, SetTextColor, UpdateWindow, CLEARTYPE_QUALITY,
+    DEFAULT_CHARSET, HFONT, LOGFONTW,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
     CDDS_ITEMPREPAINT, CDDS_PREPAINT, CDRF_DODEFAULT, CDRF_NEWFONT, CDRF_NOTIFYITEMDRAW,
-    NMITEMACTIVATE, NMLVCUSTOMDRAW,
+    LVHITTESTINFO, NMITEMACTIVATE, NMLVCUSTOMDRAW, TCIF_TEXT, TCITEMW,
 };
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DispatchMessageW, GetClientRect, GetMessageW, KillTimer, MessageBoxW,
-    MoveWindow, PostQuitMessage, SendMessageW, SetTimer, SetWindowTextW, ShowWindow,
-    TranslateMessage, HMENU, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MSG, SW_SHOW,
-    WINDOW_EX_STYLE, WINDOW_STYLE,
+    AppendMenuW, CreatePopupMenu, CreateWindowExW, DestroyMenu, DispatchMessageW, GetClientRect,
+    GetCursorPos, GetMessageW, KillTimer, MessageBoxW, MoveWindow, PostQuitMessage, SendMessageW,
+    SetTimer, SetWindowTextW, ShowWindow, TrackPopupMenuEx, TranslateMessage, HMENU, IDYES,
+    MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_YESNO, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG,
+    SW_SHOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE,
 };
 
-use crate::data::model::{Snapshot, Unattributed};
+use crate::action;
+use crate::data::model::{Snapshot, Target, Unattributed};
 use crate::data::sampler::{self, SamplerThread};
 use crate::explain::{self, Risk};
 use crate::format;
@@ -31,25 +34,46 @@ use crate::ui::{listview, window};
 use crate::vendor::wide;
 
 const WM_SETFONT: u32 = 0x0030;
+const TCM_INSERTITEMW: u32 = 4926;
+const TCM_GETCURSEL: u32 = 4875;
+const LVM_HITTEST: u32 = 4114;
+const MENU_CLOSE: usize = 1001;
+const MENU_REFRESH: usize = 1002;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum RowItem {
+enum Page {
+    Live,
+    Programs,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum RowKey {
     Group(u32),
     Member(u32),
+    Program(String),
 }
 
 struct DisplayRow {
-    item: RowItem,
+    key: RowKey,
     title: String,
     bytes: u64,
     desc: String,
     risk: Risk,
+    targets: Vec<Target>,
+}
+
+struct PendingClose {
+    targets: Vec<Target>,
+    before_used: Option<u64>,
+    started: Instant,
+    force_asked: bool,
 }
 
 pub struct App {
     hwnd: HWND,
     header: HWND,
     list: HWND,
+    tab: HWND,
     refresh: HWND,
     help: HWND,
     footer: HWND,
@@ -62,6 +86,9 @@ pub struct App {
     snapshot: Option<Snapshot>,
     rows: Vec<DisplayRow>,
     expanded: HashSet<u32>,
+    page: Page,
+    status: Option<(String, Instant)>,
+    pending: Option<PendingClose>,
     active: bool,
     minimized: bool,
     timer_on: bool,
@@ -73,6 +100,7 @@ impl App {
             hwnd: HWND::default(),
             header: HWND::default(),
             list: HWND::default(),
+            tab: HWND::default(),
             refresh: HWND::default(),
             help: HWND::default(),
             footer: HWND::default(),
@@ -85,6 +113,9 @@ impl App {
             snapshot: None,
             rows: Vec::new(),
             expanded: HashSet::new(),
+            page: Page::Live,
+            status: None,
+            pending: None,
             active: true,
             minimized: false,
             timer_on: false,
@@ -105,6 +136,7 @@ impl App {
 
         let header_class = wide("STATIC");
         let button_class = wide("BUTTON");
+        let tab_class = wide("SysTabControl32");
         let initial = wide("正在读取显存…");
         let refresh_text = wide("刷新");
         let help_text = wide("口径说明");
@@ -172,6 +204,28 @@ impl App {
                 None,
             )
             .unwrap_or_default();
+
+            self.tab = CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                PCWSTR(tab_class.as_ptr()),
+                PCWSTR::null(),
+                WINDOW_STYLE(0x5001_0000), // WS_CHILD | WS_VISIBLE | WS_TABSTOP
+                0,
+                0,
+                100,
+                28,
+                hwnd,
+                HMENU::default(),
+                HINSTANCE::default(),
+                None,
+            )
+            .unwrap_or_default();
+        }
+
+        if !self.tab.0.is_null() {
+            set_font(self.tab, self.font);
+            insert_tab(self.tab, "实时", 0);
+            insert_tab(self.tab, "按程序", 1);
         }
 
         if !self.header.0.is_null() {
@@ -192,7 +246,7 @@ impl App {
                 self.list = list;
                 listview::set_font(list, self.font);
                 listview::apply_style(list);
-                let widths = [self.px(286), self.px(92), self.px(430)];
+                let widths = [self.px(250), self.px(88), self.px(470)];
                 listview::set_columns(
                     list,
                     &[
@@ -238,6 +292,8 @@ impl App {
     }
 
     pub fn on_timer(&mut self) {
+        self.check_status_expiry();
+        self.check_pending_close();
         self.request_sample();
     }
 
@@ -259,7 +315,16 @@ impl App {
         }
         if let Some(snapshot) = latest {
             self.apply_snapshot(snapshot);
+            self.check_pending_close();
         }
+    }
+
+    pub fn list_handle(&self) -> HWND {
+        self.list
+    }
+
+    pub fn tab_handle(&self) -> HWND {
+        self.tab
     }
 
     pub fn on_sample_failed(&mut self, _code: usize) {
@@ -311,7 +376,7 @@ impl App {
         let Some(row) = self.rows.get(item.iItem as usize) else {
             return;
         };
-        let RowItem::Group(root) = row.item else {
+        let RowKey::Group(root) = row.key else {
             return;
         };
         let has_children = self.snapshot.as_ref().is_some_and(|snapshot| {
@@ -368,47 +433,75 @@ impl App {
     }
 
     fn rebuild_rows(&mut self) {
-        let Some(snapshot) = &self.snapshot else {
-            return;
-        };
-
-        let mut rows = Vec::new();
-        for group in &snapshot.groups {
-            let text = explain::render_group(group);
-            let expanded = self.expanded.contains(&group.root_pid);
-            let arrow = if group.members.len() > 1 {
-                if expanded {
-                    "▼ "
-                } else {
-                    "▶ "
-                }
-            } else {
-                ""
+        let selected = self.selected_keys();
+        let rows = {
+            let Some(snapshot) = &self.snapshot else {
+                return;
             };
-            rows.push(DisplayRow {
-                item: RowItem::Group(group.root_pid),
-                title: format!("{arrow}{}", text.title),
-                bytes: group.local_bytes,
-                desc: text.desc,
-                risk: text.risk,
-            });
+            let mut rows = Vec::new();
+            match self.page {
+                Page::Live => {
+                    for group in &snapshot.groups {
+                        let text = explain::render_group(group);
+                        let expanded = self.expanded.contains(&group.root_pid);
+                        let arrow = if group.members.len() > 1 {
+                            if expanded {
+                                "▼ "
+                            } else {
+                                "▶ "
+                            }
+                        } else {
+                            ""
+                        };
+                        rows.push(DisplayRow {
+                            key: RowKey::Group(group.root_pid),
+                            title: format!("{arrow}{}", text.title),
+                            bytes: group.local_bytes,
+                            desc: text.desc,
+                            risk: text.risk,
+                            targets: group.members.iter().map(|member| member.target()).collect(),
+                        });
 
-            if expanded {
-                for member in &group.members {
-                    let member_text = explain::render_member(member);
-                    rows.push(DisplayRow {
-                        item: RowItem::Member(member.pid),
-                        title: member_text.title,
-                        bytes: member.local_bytes,
-                        desc: member_text.desc,
-                        risk: member_text.risk,
-                    });
+                        if expanded {
+                            for member in &group.members {
+                                let member_text = explain::render_member(member);
+                                rows.push(DisplayRow {
+                                    key: RowKey::Member(member.pid),
+                                    title: member_text.title,
+                                    bytes: member.local_bytes,
+                                    desc: member_text.desc,
+                                    risk: member_text.risk,
+                                    targets: vec![member.target()],
+                                });
+                            }
+                        }
+                    }
+                }
+                Page::Programs => {
+                    for program in crate::data::model::build_programs(&snapshot.groups) {
+                        let text = explain::render_program(&program);
+                        rows.push(DisplayRow {
+                            key: RowKey::Program(program.key.clone()),
+                            title: text.title,
+                            bytes: program.local_bytes,
+                            desc: text.desc,
+                            risk: text.risk,
+                            targets: program
+                                .members
+                                .iter()
+                                .map(|member| member.target())
+                                .collect(),
+                        });
+                    }
                 }
             }
-        }
+            rows
+        };
+
         let changed = self.rows.len() != rows.len()
             || self.rows.iter().zip(&rows).any(|(old, new)| {
-                old.title != new.title
+                old.key != new.key
+                    || old.title != new.title
                     || old.bytes != new.bytes
                     || old.desc != new.desc
                     || old.risk != new.risk
@@ -430,11 +523,279 @@ impl App {
                 .collect();
             listview::set_rows(self.list, &tuples);
             listview::ensure_visible(self.list, top);
+            self.restore_selection(&selected);
         }
         self.update_footer();
     }
 
+    fn selected_keys(&self) -> Vec<RowKey> {
+        if self.list.0.is_null() {
+            return Vec::new();
+        }
+        self.rows
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| listview::is_selected(self.list, *index))
+            .map(|(_, row)| row.key.clone())
+            .collect()
+    }
+
+    /// 刷新后按 key 把选中状态放回去——列表每秒重建，不能把用户的选择弄丢。
+    fn restore_selection(&self, keys: &[RowKey]) {
+        if keys.is_empty() || self.list.0.is_null() {
+            return;
+        }
+        let mut focused = false;
+        for key in keys {
+            if let Some(index) = self.rows.iter().position(|row| row.key == *key) {
+                listview::select_item(self.list, index, !focused);
+                focused = true;
+            }
+        }
+    }
+
+    pub fn on_page_changed(&mut self) {
+        let current = unsafe { SendMessageW(self.tab, TCM_GETCURSEL, WPARAM(0), LPARAM(0)) };
+        self.page = if current.0 == 1 {
+            Page::Programs
+        } else {
+            Page::Live
+        };
+        self.rebuild_rows();
+    }
+
+    pub fn on_right_click(&mut self, _lparam: LPARAM) {
+        // 不信任通知里带的命中结果：直接按光标位置自己 HitTest。
+        let mut point = POINT::default();
+        unsafe {
+            let _ = GetCursorPos(&mut point);
+            let _ = ScreenToClient(self.list, &mut point);
+        }
+        let mut info = LVHITTESTINFO {
+            pt: point,
+            ..Default::default()
+        };
+        unsafe {
+            SendMessageW(
+                self.list,
+                LVM_HITTEST,
+                WPARAM(0),
+                LPARAM(&mut info as *mut _ as isize),
+            );
+        }
+        if info.iItem < 0 || info.iItem as usize >= self.rows.len() {
+            return;
+        }
+        let index = info.iItem as usize;
+        if !listview::is_selected(self.list, index) {
+            listview::clear_selection(self.list);
+            listview::select_item(self.list, index, true);
+        }
+
+        let keys = self.selected_keys();
+        let mut targets: Vec<Target> = Vec::new();
+        let mut forbidden = false;
+        for key in &keys {
+            if let Some(row) = self.rows.iter().find(|row| row.key == *key) {
+                forbidden |= row.risk == Risk::Forbidden;
+                for target in &row.targets {
+                    if !targets.iter().any(|existing| existing.pid == target.pid) {
+                        targets.push(*target);
+                    }
+                }
+            }
+        }
+        if targets.is_empty() {
+            return;
+        }
+
+        let menu = match unsafe { CreatePopupMenu() } {
+            Ok(menu) => menu,
+            Err(_) => return,
+        };
+        let close_label = wide(if forbidden {
+            "系统进程，不能结束"
+        } else {
+            "结束任务"
+        });
+        let close_flags = if forbidden {
+            windows::Win32::UI::WindowsAndMessaging::MENU_ITEM_FLAGS(MF_STRING.0 | MF_GRAYED.0)
+        } else {
+            MF_STRING
+        };
+        unsafe {
+            let _ = AppendMenuW(menu, close_flags, MENU_CLOSE, PCWSTR(close_label.as_ptr()));
+            let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+        }
+        let refresh_label = wide("刷新");
+        unsafe {
+            let _ = AppendMenuW(
+                menu,
+                MF_STRING,
+                MENU_REFRESH,
+                PCWSTR(refresh_label.as_ptr()),
+            );
+        }
+
+        let mut point = POINT::default();
+        unsafe {
+            let _ = GetCursorPos(&mut point);
+        }
+        let command = unsafe {
+            TrackPopupMenuEx(
+                menu,
+                TPM_RETURNCMD.0 | TPM_RIGHTBUTTON.0,
+                point.x,
+                point.y,
+                self.hwnd,
+                None,
+            )
+        }
+        .0 as u32;
+        unsafe {
+            let _ = DestroyMenu(menu);
+        }
+
+        match command as usize {
+            MENU_CLOSE if !forbidden => self.begin_close(targets),
+            MENU_REFRESH => self.request_sample(),
+            _ => {}
+        }
+    }
+
+    fn begin_close(&mut self, targets: Vec<Target>) {
+        let verified: Vec<Target> = targets.into_iter().filter(action::is_alive).collect();
+        if verified.is_empty() {
+            self.set_status(
+                "这些进程已经退出（或 PID 已变化），没有执行。".to_string(),
+                8,
+            );
+            return;
+        }
+        let windows = action::post_close(&verified);
+        let count = verified.len();
+        let before_used = self
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.adapter_used);
+        self.pending = Some(PendingClose {
+            targets: verified,
+            before_used,
+            started: Instant::now(),
+            force_asked: false,
+        });
+        let text = if windows > 0 {
+            format!("正在关闭 {count} 个进程（已发送关闭请求）…")
+        } else {
+            format!("正在关闭 {count} 个进程（没有可见窗口，3 秒后会询问是否强制）…")
+        };
+        self.set_status(text, 120);
+        self.request_sample();
+    }
+
+    fn check_pending_close(&mut self) {
+        let (alive, elapsed, force_asked) = match &self.pending {
+            Some(pending) => (
+                pending
+                    .targets
+                    .iter()
+                    .filter(|target| action::is_alive(target))
+                    .copied()
+                    .collect::<Vec<Target>>(),
+                pending.started.elapsed(),
+                pending.force_asked,
+            ),
+            None => return,
+        };
+
+        if alive.is_empty() {
+            let pending = self.pending.take().expect("pending 刚检查过");
+            let count = pending.targets.len();
+            let after = self
+                .snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.adapter_used);
+            let text = match (pending.before_used, after) {
+                (Some(before), Some(after)) => format!(
+                    "已结束 {count} 个进程 · 整卡已用 {} → {}",
+                    format::bytes(before),
+                    format::bytes(after)
+                ),
+                _ => format!("已结束 {count} 个进程"),
+            };
+            self.set_status(text, 15);
+            return;
+        }
+
+        if elapsed >= Duration::from_secs(3) && !force_asked {
+            // 先置位再弹窗：MessageBox 会泵消息，别让下一轮 timer 再弹一个。
+            if let Some(pending) = &mut self.pending {
+                pending.force_asked = true;
+            }
+            let count = alive.len();
+            let text = wide(&format!(
+                "还有 {count} 个进程没有退出。\n\n强制结束会让它们来不及保存，继续进行吗？"
+            ));
+            let caption = wide("强制结束");
+            let answer = unsafe {
+                MessageBoxW(
+                    self.hwnd,
+                    PCWSTR(text.as_ptr()),
+                    PCWSTR(caption.as_ptr()),
+                    MB_YESNO | MB_ICONINFORMATION,
+                )
+            };
+            if answer == IDYES {
+                let mut failed = 0usize;
+                let mut first_error = None;
+                for target in &alive {
+                    if let Err(error) = action::terminate(target) {
+                        failed += 1;
+                        first_error.get_or_insert(error);
+                    }
+                }
+                let message = if failed == 0 {
+                    format!("已请求强制结束 {count} 个进程…")
+                } else {
+                    let reason = first_error
+                        .map(|error| error.user_text())
+                        .unwrap_or("系统没有给出更多原因。");
+                    format!("{count} 个进程里有 {failed} 个结束失败：{reason}")
+                };
+                self.set_status(message, 15);
+            } else {
+                self.pending = None;
+                self.set_status("已取消；进程还在运行。".to_string(), 10);
+            }
+            return;
+        }
+
+        if !force_asked {
+            self.set_status(format!("还有 {} 个进程没退出…", alive.len()), 60);
+        }
+    }
+
+    fn set_status(&mut self, text: String, seconds: u64) {
+        self.status = Some((text, Instant::now() + Duration::from_secs(seconds)));
+        self.update_footer();
+    }
+
+    fn check_status_expiry(&mut self) {
+        let expired = self
+            .status
+            .as_ref()
+            .is_some_and(|(_, until)| Instant::now() >= *until);
+        if expired {
+            self.status = None;
+            self.update_footer();
+        }
+    }
+
     fn update_footer(&mut self) {
+        if let Some((text, _)) = &self.status {
+            set_text(self.footer, text);
+            return;
+        }
         let Some(snapshot) = &self.snapshot else {
             return;
         };
@@ -446,8 +807,17 @@ impl App {
             Unattributed::Overcounted(_) => "未归属 —（口径异常：进程合计超过整卡）".to_string(),
             Unattributed::Unavailable => "未归属 —（整卡读数不可用）".to_string(),
         };
-        let text = format!("{base} · 共 {} 组 · 双击分组可展开", snapshot.groups.len());
-        set_text(self.footer, &text);
+        let extra = match self.page {
+            Page::Live => format!(
+                "共 {} 组 · 双击分组可展开 · 右键结束",
+                snapshot.groups.len()
+            ),
+            Page::Programs => format!(
+                "共 {} 个程序 · 右键结束",
+                crate::data::model::build_programs(&snapshot.groups).len()
+            ),
+        };
+        set_text(self.footer, &format!("{base} · {extra}"));
     }
 
     fn show_help(&self) {
@@ -536,7 +906,17 @@ impl App {
                 true,
             );
             let footer_y = height - margin - footer_height;
-            let list_y = margin + header_height + gap;
+            let tab_y = margin + header_height + self.px(4);
+            let tab_height = self.px(28);
+            let _ = MoveWindow(
+                self.tab,
+                margin,
+                tab_y,
+                (width - margin * 2).max(0),
+                tab_height,
+                true,
+            );
+            let list_y = tab_y + tab_height + self.px(6);
             let _ = MoveWindow(
                 self.list,
                 margin,
@@ -605,6 +985,24 @@ pub fn run() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn insert_tab(tab: HWND, text: &str, index: usize) {
+    let mut buffer = wide(text);
+    let mut item = TCITEMW {
+        mask: TCIF_TEXT,
+        pszText: PWSTR(buffer.as_mut_ptr()),
+        cchTextMax: buffer.len() as i32 - 1,
+        ..Default::default()
+    };
+    unsafe {
+        SendMessageW(
+            tab,
+            TCM_INSERTITEMW,
+            WPARAM(index),
+            LPARAM(&mut item as *mut _ as isize),
+        );
+    }
 }
 
 fn create_font(height: i32, weight: i32) -> HFONT {

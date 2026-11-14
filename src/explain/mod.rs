@@ -7,4 +7,4 @@ pub mod render;
 pub mod rules;
 
 pub use classify::Risk;
-pub use render::{render_group, render_member};
+pub use render::{render_group, render_member, render_program};

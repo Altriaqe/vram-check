@@ -124,6 +124,11 @@ pub struct AdapterInfo {
 }
 
 // data/model.rs
+pub struct Target {
+    pub pid: u32,
+    pub start_time: Option<u64>, // FILETIME；杀进程前核对，防 PID 复用
+}
+
 pub struct ProcSample {
     pub pid: u32,
     pub name: String,           // Toolhelp32；SYSTEM 进程也能拿到
@@ -132,14 +137,17 @@ pub struct ProcSample {
     pub nonlocal_bytes: u64,    // 共享内存
     pub gpu_pct: Option<f32>,   // max(engine)，不是 sum
     pub has_window: bool,       // 有可见顶层窗口 → 风险升级
+    pub start_time: Option<u64>,
 }
 
 pub struct GroupMember {
     pub pid: u32,
     pub name: String,
     pub local_bytes: u64,
+    pub nonlocal_bytes: u64,
     pub gpu_pct: Option<f32>,
     pub has_window: bool,
+    pub start_time: Option<u64>,
 }
 
 pub struct AppGroup {
@@ -229,6 +237,22 @@ unattributed = adapter_used - Σ(local_bytes)
 虚拟显卡：不进"整卡"求和，但仍在列表里可见（标注"虚拟显示器"）
 ```
 
+### 6.6 关闭流程（M3）
+
+```
+右键选中（禁止行不可选）
+   → 核对每个目标的 (pid, start_time)
+   → 给可见顶层窗口 PostMessage(WM_CLOSE)
+   → 等 3 秒（UI 不阻塞，继续刷新）
+   → 还活着 → MessageBox 确认 → 核对 start_time → TerminateProcess
+   → 全部退出 → footer 显示"已结束 N 个进程 · 整卡已用 X → Y"
+```
+
+**三条纪律**：
+1. 默认只优雅关闭；强制必须二次确认；
+2. 拿不到创建时间就拒绝强杀，宁可不做；
+3. 结果用整卡前后对比，不把"选中进程的字节数"冒充实测释放。
+
 ---
 
 ## 7. vendor 边界（最重要的纪律）
@@ -279,10 +303,12 @@ vram-sentinel/
     │   ├── rules.rs         TSV 解析与匹配
     │   ├── classify.rs      风险分级
     │   └── render.rs        文案拼装（铁律在这里落地）
-    ├── action/              ⬜ M3
+    ├── action/
+    │   ├── mod.rs
+    │   └── close.rs         WM_CLOSE → 3 秒 → 强制确认；核对 (pid, start_time)
     └── ui/
         ├── window.rs        窗口过程、消息分派
-        └── listview.rs      ListView 封装、列、行、滚动位置
+        └── listview.rs      ListView 封装、列、行、选中、滚动位置
 ```
 
 ---

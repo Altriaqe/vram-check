@@ -7,12 +7,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::{Duration, Instant};
 
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HWND, WAIT_OBJECT_0};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    CreateEventW, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
+    CreateEventW, GetProcessTimes, OpenProcess, SetEvent, WaitForMultipleObjects,
+    WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
 
@@ -358,6 +359,22 @@ fn base_sample(
         nonlocal_bytes: 0,
         gpu_pct: None,
         has_window: window_pids.contains(&pid),
+        start_time: process_start_time(pid),
+    }
+}
+
+/// 创建时间（FILETIME 原值）。拿不到就是 `None`——杀进程前会因此拒绝操作。
+fn process_start_time(pid: u32) -> Option<u64> {
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let mut creation = FILETIME::default();
+        let mut exit = FILETIME::default();
+        let mut kernel = FILETIME::default();
+        let mut user = FILETIME::default();
+        let result = GetProcessTimes(handle, &mut creation, &mut exit, &mut kernel, &mut user);
+        let _ = CloseHandle(handle);
+        result.ok()?;
+        Some(((creation.dwHighDateTime as u64) << 32) | creation.dwLowDateTime as u64)
     }
 }
 

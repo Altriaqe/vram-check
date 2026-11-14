@@ -4,6 +4,13 @@
 
 use std::collections::HashMap;
 
+/// 进程的唯一键：PID 会被复用，杀进程前必须核对创建时间。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Target {
+    pub pid: u32,
+    pub start_time: Option<u64>,
+}
+
 /// 单个进程的原始采样值。显存单位一律字节。
 #[derive(Debug, Clone)]
 pub struct ProcSample {
@@ -18,6 +25,8 @@ pub struct ProcSample {
     pub gpu_pct: Option<f32>,
     /// 是否有可见的顶层窗口（用于"有窗口 = 谨慎"的判断）。
     pub has_window: bool,
+    /// 进程创建时间（FILETIME），用于防 PID 复用。
+    pub start_time: Option<u64>,
 }
 
 /// 组内单个进程。展开分组时显示。
@@ -26,8 +35,19 @@ pub struct GroupMember {
     pub pid: u32,
     pub name: String,
     pub local_bytes: u64,
+    pub nonlocal_bytes: u64,
     pub gpu_pct: Option<f32>,
     pub has_window: bool,
+    pub start_time: Option<u64>,
+}
+
+impl GroupMember {
+    pub fn target(&self) -> Target {
+        Target {
+            pid: self.pid,
+            start_time: self.start_time,
+        }
+    }
 }
 
 /// 进程树聚合后的一行。
@@ -128,8 +148,10 @@ pub fn build_groups(samples: &[ProcSample]) -> Vec<AppGroup> {
             pid: sample.pid,
             name: sample.name.clone(),
             local_bytes: sample.local_bytes,
+            nonlocal_bytes: sample.nonlocal_bytes,
             gpu_pct: sample.gpu_pct,
             has_window: sample.has_window,
+            start_time: sample.start_time,
         });
     }
 
@@ -161,6 +183,57 @@ fn is_barrier(name: &str) -> bool {
         .any(|barrier| name.eq_ignore_ascii_case(barrier))
 }
 
+/// 按"程序名"汇总的一行（第二页）。
+#[derive(Debug, Clone)]
+pub struct ProgramTotal {
+    /// 显示名，取第一次见到的写法。
+    pub name: String,
+    /// 小写唯一键。
+    pub key: String,
+    pub local_bytes: u64,
+    pub nonlocal_bytes: u64,
+    pub gpu_pct: Option<f32>,
+    pub has_window: bool,
+    pub members: Vec<GroupMember>,
+}
+
+/// 把进程树分组再按程序名合并——同一程序的多个进程/多个分组只留一行。
+pub fn build_programs(groups: &[AppGroup]) -> Vec<ProgramTotal> {
+    let mut map: std::collections::HashMap<String, ProgramTotal> = std::collections::HashMap::new();
+    for group in groups {
+        for member in &group.members {
+            let key = member.name.to_ascii_lowercase();
+            let entry = map.entry(key.clone()).or_insert_with(|| ProgramTotal {
+                name: member.name.clone(),
+                key,
+                local_bytes: 0,
+                nonlocal_bytes: 0,
+                gpu_pct: None,
+                has_window: false,
+                members: Vec::new(),
+            });
+            entry.local_bytes = entry.local_bytes.saturating_add(member.local_bytes);
+            entry.nonlocal_bytes = entry.nonlocal_bytes.saturating_add(member.nonlocal_bytes);
+            entry.has_window |= member.has_window;
+            if let Some(pct) = member.gpu_pct {
+                entry.gpu_pct = Some(entry.gpu_pct.map_or(pct, |old| old.max(pct)));
+            }
+            entry.members.push(member.clone());
+        }
+    }
+
+    let mut out: Vec<ProgramTotal> = map.into_values().collect();
+    for program in &mut out {
+        program.members.sort_unstable_by_key(|member| member.pid);
+    }
+    out.sort_by(|a, b| {
+        b.local_bytes
+            .cmp(&a.local_bytes)
+            .then_with(|| a.name.cmp(&b.name))
+    });
+    out
+}
+
 /// 整卡已用 − Σ(本地)。负值不是"负数"，是口径异常。
 pub fn unattributed(adapter_used: u64, total_local: u64) -> Unattributed {
     if total_local <= adapter_used {
@@ -183,6 +256,7 @@ mod tests {
             nonlocal_bytes: 0,
             gpu_pct: None,
             has_window: false,
+            start_time: None,
         }
     }
 
@@ -263,5 +337,22 @@ mod tests {
         assert_eq!(unattributed(1000, 800), Unattributed::Bytes(200));
         assert_eq!(unattributed(1000, 1000), Unattributed::Bytes(0));
         assert_eq!(unattributed(1000, 1200), Unattributed::Overcounted(200));
+    }
+
+    #[test]
+    fn programs_sum_all_processes_with_same_name() {
+        let samples = vec![
+            sample(10, 0, "chrome.exe", 100),
+            sample(11, 10, "chrome.exe", 300),
+            sample(12, 0, "Code.exe", 50),
+        ];
+        let groups = build_groups(&samples);
+        let programs = build_programs(&groups);
+        assert_eq!(programs.len(), 2);
+        assert_eq!(programs[0].name, "chrome.exe");
+        assert_eq!(programs[0].local_bytes, 400 * 1024 * 1024);
+        assert_eq!(programs[0].members.len(), 2);
+        assert_eq!(programs[1].name, "Code.exe");
+        assert_eq!(programs[1].local_bytes, 50 * 1024 * 1024);
     }
 }

@@ -3,7 +3,7 @@
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Graphics::Gdi::{GetSysColorBrush, SetBkMode, COLOR_WINDOW, HDC, TRANSPARENT};
-use windows::Win32::UI::Controls::{NMHDR, NM_CUSTOMDRAW, NM_DBLCLK};
+use windows::Win32::UI::Controls::{NMHDR, NM_CUSTOMDRAW, NM_DBLCLK, NM_RCLICK, TCN_SELCHANGE};
 use windows::Win32::UI::WindowsAndMessaging::{
     DefWindowProcW, GetWindowLongPtrW, LoadCursorW, RegisterClassW, SetWindowLongPtrW,
     CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, GWLP_USERDATA, IDC_ARROW, WNDCLASSW,
@@ -94,13 +94,24 @@ unsafe extern "system" fn wndproc(
         WM_NOTIFY => {
             // SAFETY: WM_NOTIFY 的 lParam 一定是 NMHDR 开头的结构，本消息处理期间有效。
             let header = unsafe { &*(lparam.0 as *const NMHDR) };
-            match header.code {
-                NM_CUSTOMDRAW => app.on_custom_draw(lparam),
-                NM_DBLCLK => {
-                    app.on_double_click(lparam);
-                    LRESULT(0)
+            if header.hwndFrom == app.list_handle() {
+                match header.code {
+                    NM_CUSTOMDRAW => app.on_custom_draw(lparam),
+                    NM_DBLCLK => {
+                        app.on_double_click(lparam);
+                        LRESULT(0)
+                    }
+                    NM_RCLICK => {
+                        app.on_right_click(lparam);
+                        LRESULT(0)
+                    }
+                    _ => DefWindowProcW(hwnd, message, wparam, lparam),
                 }
-                _ => DefWindowProcW(hwnd, message, wparam, lparam),
+            } else if header.hwndFrom == app.tab_handle() && header.code == TCN_SELCHANGE {
+                app.on_page_changed();
+                LRESULT(0)
+            } else {
+                DefWindowProcW(hwnd, message, wparam, lparam)
             }
         }
         WM_CTLCOLORSTATIC => {

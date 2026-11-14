@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 
+mod action;
 mod app;
 mod data;
 mod explain;
