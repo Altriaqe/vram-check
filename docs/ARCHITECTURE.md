@@ -108,6 +108,8 @@ UI 线程                         采样线程
 2. UI 线程**永不** `join` 采样线程（会卡界面）——退出时先 `SetEvent(stop)` 再等。
 3. 失焦/最小化 → 采样线程 `Wait` 不超时，CPU 归零。
 
+**启动顺序**：窗口先创建/显示，然后 `PostMessage(WM_APP_START)` 才起采样线程；PDH/DXGI 用 `/DELAYLOAD` 延迟加载。首屏不被采样的 DLL 初始化拖慢。
+
 **不用 async**：没有网络、没有并发 IO，async 只会引入 `tokio`/`futures` 把体积顶穿。
 
 ---

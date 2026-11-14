@@ -9,7 +9,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CREATESTRUCTW, CS_HREDRAW, CS_VREDRAW, GWLP_USERDATA, IDC_ARROW, WNDCLASSW,
 };
 
-use crate::app::App;
+use crate::app::{App, WM_APP_START};
 use crate::data::sampler::{WM_SAMPLE_FAILED, WM_SNAPSHOT_READY};
 use crate::vendor::wide;
 
@@ -128,6 +128,10 @@ unsafe extern "system" fn wndproc(
         }
         WM_SAMPLE_FAILED => {
             app.on_sample_failed(wparam.0);
+            LRESULT(0)
+        }
+        WM_APP_START => {
+            app.start_sampler();
             LRESULT(0)
         }
         WM_DESTROY => {

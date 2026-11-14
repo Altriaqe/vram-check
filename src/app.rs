@@ -19,10 +19,10 @@ use windows::Win32::UI::Controls::{
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetDpiForWindow};
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DestroyMenu, DispatchMessageW, GetClientRect,
-    GetCursorPos, GetMessageW, KillTimer, MessageBoxW, MoveWindow, PostQuitMessage, SendMessageW,
-    SetTimer, SetWindowTextW, ShowWindow, TrackPopupMenuEx, TranslateMessage, HMENU, IDYES,
-    MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_YESNO, MF_GRAYED, MF_SEPARATOR, MF_STRING, MSG,
-    SW_SHOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE,
+    GetCursorPos, GetMessageW, KillTimer, MessageBoxW, MoveWindow, PostMessageW, PostQuitMessage,
+    SendMessageW, SetTimer, SetWindowTextW, ShowWindow, TrackPopupMenuEx, TranslateMessage, HMENU,
+    IDYES, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_YESNO, MF_GRAYED, MF_SEPARATOR, MF_STRING,
+    MSG, SW_SHOW, TPM_RETURNCMD, TPM_RIGHTBUTTON, WINDOW_EX_STYLE, WINDOW_STYLE,
 };
 
 use crate::action;
@@ -34,6 +34,7 @@ use crate::ui::{listview, window};
 use crate::vendor::wide;
 
 const WM_SETFONT: u32 = 0x0030;
+pub const WM_APP_START: u32 = 0x8003;
 const TCM_INSERTITEMW: u32 = 4926;
 const TCM_GETCURSEL: u32 = 4875;
 const LVM_HITTEST: u32 = 4114;
@@ -261,20 +262,27 @@ impl App {
             Err(err) => set_text(self.header, &format!("列表创建失败：{err}")),
         }
 
+        self.size_children();
+    }
+
+    /// 窗口已经显示后再起采样线程：先让用户看到界面，别让加载 DLL 抢首屏时间。
+    pub fn start_sampler(&mut self) {
         match sampler::spawn(self.hwnd) {
             Ok((thread, rx)) => {
                 thread.request_sample();
                 self.sampler = Some(thread);
                 self.rx = Some(rx);
             }
-            Err(err) => set_text(self.header, err.user_text()),
+            Err(err) => {
+                set_text(self.header, err.user_text());
+                return;
+            }
         }
 
         unsafe {
-            SetTimer(hwnd, 1, 1000, None);
+            SetTimer(self.hwnd, 1, 1000, None);
         }
         self.timer_on = true;
-        self.size_children();
     }
 
     pub fn on_size(&mut self, minimized: bool) {
@@ -998,6 +1006,7 @@ pub fn run() -> Result<(), String> {
     unsafe {
         let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = UpdateWindow(hwnd);
+        let _ = PostMessageW(hwnd, WM_APP_START, WPARAM(0), LPARAM(0));
     }
 
     let mut message = MSG::default();

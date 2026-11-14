@@ -77,10 +77,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\gate.ps1
 
 | 文件 | 说明 |
 |---|---|
-| `dist\vram-sentinel.exe` | 294 KB，带图标与版本信息（1.0.0），双击即用 |
-| `dist\vram-sentinel-1.0.0-win64.zip` | exe + LICENSE + README + 第三方声明 |
+| `release\vram-sentinel.exe` | 298 KB，带图标与版本信息（1.0.0），双击即用 |
+| `release\vram-sentinel-1.0.0-win64.zip` | exe + LICENSE + README + 第三方声明 |
+| `release\SHA256SUMS.txt` | 两个文件的 SHA-256 |
 
-exe 的 SHA-256（本次构建）：`323359CCDC644D52994FD8EE64AF36A1E4B15E2D00F3B6C8756430C908D57382`
+exe 的 SHA-256：`306A3D6192692C7108D42131AEBF099EA0E231B0E2B5985ABD80E3AD3C972466`
+
+重新打包（守门 + 复制文档 + 压缩 + 写哈希）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1
+```
 
 ## 杀软误报
 

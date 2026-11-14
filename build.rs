@@ -23,6 +23,10 @@ fn main() {
 
     println!("cargo:rerun-if-changed=app.rc");
     println!("cargo:rerun-if-changed=app.ico");
+    // 采样才用得到 PDH/DXGI，延迟加载，别拖慢窗口出现。
+    println!("cargo:rustc-link-arg-bins=/DELAYLOAD:pdh.dll");
+    println!("cargo:rustc-link-arg-bins=/DELAYLOAD:dxgi.dll");
+    println!("cargo:rustc-link-arg-bins=delayimp.lib");
     match find_rc() {
         Some(rc) => {
             let resource = out_dir.join("app.res");
